@@ -1,0 +1,37 @@
+# kind cluster definition — 1 control-plane + 2 workers.
+# Apply with: k8s/scripts/cluster-up.sh (or `make cluster-up`).
+#
+# The node image is pinned by digest in k8s/scripts/cluster-up.sh and passed with
+# --image, so the pin lives in exactly one place instead of once per node here.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+# Tells containerd to resolve registries through /etc/containerd/certs.d.
+# k8s/scripts/cluster-up.sh then drops a hosts.toml there on every node mapping
+# localhost:5001 to the registry container, so an image pushed from the host is
+# pullable by a Pod under the identical reference.
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
+
+nodes:
+  - role: control-plane
+    # kind has no load balancer. Host :8080 lands on nodePort 30080 of the
+    # control-plane, and kube-proxy forwards from there to a Pod on any node —
+    # see the NodePort override in the README.
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP
+
+  # Workload class the Agent service selects on (see k8s/deployment.yaml).
+  # NOTE: labels under the node-role.kubernetes.io/ prefix cannot go here —
+  # NodeRestriction forbids kubelet from self-assigning them and the node fails
+  # to register. cluster-up.sh applies the worker role label after creation.
+  - role: worker
+    labels:
+      workload: agent
+  - role: worker
+    labels:
+      workload: agent

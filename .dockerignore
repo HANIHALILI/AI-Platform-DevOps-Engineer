@@ -1,0 +1,35 @@
+# The build context is the repository root, but the Dockerfile only ever COPYs
+# app/pyproject.toml, app/uv.lock and app/app/. Everything else is excluded so
+# the context stays small and unrelated edits do not bust the dependency layer.
+# Patterns are **-prefixed because the sources live one level down, under app/.
+
+# app/.venv alone is ~190 MB / 9,000+ files — without this line every build
+# ships all of it to the Docker daemon.
+**/.venv
+
+.git
+.gitignore
+.gitattributes
+
+# Stale bytecode must never reach the image; the venv is byte-compiled at build
+# time by UV_COMPILE_BYTECODE instead.
+**/__pycache__
+*.pyc
+*.pyo
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+
+**/tests/
+**/scripts/
+**/*.md
+
+.env
+**/.env.*
+
+Makefile
+Dockerfile
+.dockerignore
+k8s/
+.github/
+*.log

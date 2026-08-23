@@ -1,0 +1,21 @@
+# The directory name must match `name` — `helm lint` treats a mismatch as an
+# error — so this chart lives at k8s/agent/.
+apiVersion: v2
+name: agent
+description: The Agent service — a FastAPI application, hardened and non-root
+type: application
+
+# Chart version: bumped when the templates change.
+version: 0.1.0
+# Application version: the default image tag is derived from this unless
+# image.tag is set explicitly.
+appVersion: "0.1.0"
+
+# topologySpreadConstraints, seccompProfile and the modern probe fields used by
+# this chart all require a reasonably current control plane.
+kubeVersion: ">=1.27.0-0"
+
+keywords:
+  - agent
+  - fastapi
+home: https://example.invalid/agent

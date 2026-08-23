@@ -1,0 +1,144 @@
+# Default values for the Agent service chart.
+# Defaults target the local kind cluster in this repository; override per
+# environment with `-f values-<env>.yaml` or `--set`.
+
+replicaCount: 2
+
+image:
+  # The same reference pushed from the host; resolved in-cluster through the
+  # containerd mirror on each node, so no imagePullSecrets are needed.
+  repository: localhost:5001/agent
+  # Empty => Chart.appVersion. `dev` is a moving tag, which is why pullPolicy
+  # below is Always.
+  tag: dev
+  pullPolicy: Always
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # The Agent service never calls the Kubernetes API, so it gets no token to
+  # steal. Set true only if the workload starts talking to the API server.
+  automountServiceAccountToken: false
+
+podAnnotations: {}
+podLabels: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  # Named port on the container; see `containerPort` below.
+  targetPort: http
+  # Only used when type is NodePort. 30080 is the port k8s/kind-config.yaml maps to
+  # host :8080, so `--set service.type=NodePort` makes the Agent service
+  # reachable at http://localhost:8080 from the host.
+  nodePort: null
+  annotations: {}
+
+containerPort: 8000
+
+# Non-secret configuration, rendered into a ConfigMap and consumed with
+# `envFrom`. app/app/config.py reads every setting from the environment with
+# env_prefix="AGENT_", and all of them have defaults, so only overrides belong
+# here. Changing any value rolls the Pods via the checksum annotation.
+config:
+  AGENT_LOG_LEVEL: INFO
+  # AGENT_LLM_URL: http://ollama.llm.svc.cluster.local:11434/v1
+  # AGENT_QDRANT_URL: http://qdrant.vector.svc.cluster.local:6333
+
+# NEVER put secrets in `config` — it becomes a plain ConfigMap. Reference a
+# Secret here instead:
+#   extraEnvFrom:
+#     - secretRef:
+#         name: agent-secrets
+extraEnv: []
+extraEnvFrom: []
+
+# Both requests and limits are set: requests drive scheduling, limits stop one
+# replica from starving its node.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Must agree with the numeric USER baked into the image (uid/gid 10001).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# /healthz touches no external service by design: an LLM outage must never
+# restart-loop every replica.
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+# /readyz returns 503 while the LLM is unreachable, so a replica that cannot
+# serve leaves the Service endpoints instead of restarting. timeoutSeconds
+# exceeds the app's own 5s READY_TIMEOUT.
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 6
+  failureThreshold: 3
+
+startupProbe: {}
+
+# The root filesystem is read-only; /tmp is the only writable path.
+tmpVolume:
+  sizeLimit: 64Mi
+
+# Schedule only onto worker nodes, which carry workload=agent.
+nodeSelector:
+  workload: agent
+
+tolerations: []
+affinity: {}
+
+# One Pod per node. With DoNotSchedule this is what proves the multi-node
+# cluster is real: if the replicas could not be spread they stay Pending
+# instead of quietly co-locating.
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: DoNotSchedule
+
+# maxSurge MUST stay 0 while topologySpread is DoNotSchedule and replicas equal
+# the number of eligible nodes — a surge Pod would have nowhere to schedule and
+# the rollout would deadlock in Pending. The chart refuses to render an
+# incompatible combination rather than letting you discover it mid-upgrade.
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
+
+terminationGracePeriodSeconds: 30
+
+revisionHistoryLimit: 3
