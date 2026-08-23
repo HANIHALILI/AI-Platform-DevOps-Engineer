@@ -6,7 +6,9 @@ metadata:
   labels:
     {{- include "agent.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   strategy:
     type: {{ .Values.updateStrategy.type }}
@@ -32,6 +34,9 @@ spec:
         */}}
         {{- if .Values.config }}
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if .Values.secrets }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
@@ -75,11 +80,15 @@ spec:
             - name: http
               containerPort: {{ .Values.containerPort }}
               protocol: TCP
-          {{- if or .Values.config .Values.extraEnvFrom }}
+          {{- if or .Values.config .Values.secrets .Values.extraEnvFrom }}
           envFrom:
             {{- if .Values.config }}
             - configMapRef:
                 name: {{ include "agent.fullname" . }}-config
+            {{- end }}
+            {{- if .Values.secrets }}
+            - secretRef:
+                name: {{ include "agent.fullname" . }}-secrets
             {{- end }}
             {{- with .Values.extraEnvFrom }}
             {{- toYaml . | nindent 12 }}

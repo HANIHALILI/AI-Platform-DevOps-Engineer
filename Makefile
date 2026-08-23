@@ -1,5 +1,3 @@
-# Agent service — local kind cluster, registry, image, Helm release.
-
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 .ONESHELL:
@@ -10,13 +8,13 @@ REGISTRY_NAME ?= kind-registry
 REGISTRY_PORT ?= 5001
 REGISTRY_IMAGE ?= registry:3@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33
 KIND_CONFIG   ?= k8s/kind-config.yaml
-# pinned to a digest so the node image always matches KIND_VERSION
 NODE_IMAGE    ?= kindest/node:v1.34.8@sha256:02722c2dedddcfc00febf5d27fbeb9b7b2c14294c82109ff4a85d89ac9ba3256
 IMAGE         ?= localhost:$(REGISTRY_PORT)/agent
 IMAGE_TAG     ?= dev
 RELEASE       ?= agent
 NAMESPACE     ?= default
 MAX_IMAGE_MB  ?= 250
+METRICS_SERVER_VERSION ?= v0.7.2
 
 KIND_VERSION    ?= v0.32.0
 KUBECTL_VERSION ?= v1.34.8
@@ -76,8 +74,6 @@ registry:
 	done
 	echo "registry did not respond on :$(REGISTRY_PORT)" >&2; exit 1
 
-# the registry can only join the "kind" docker network after the cluster
-# creates it, and containerd needs the mirror written on every node.
 cluster:
 	@kind get clusters 2>/dev/null | grep -qx $(CLUSTER_NAME) || \
 	  kind create cluster --name $(CLUSTER_NAME) --config $(KIND_CONFIG) --image $(NODE_IMAGE) --wait 180s
@@ -94,6 +90,11 @@ cluster:
 	kubectl create configmap local-registry-hosting -n kube-public \
 	  --from-literal=localRegistryHosting.v1='host: "localhost:$(REGISTRY_PORT)"' \
 	  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+	kubectl apply -f "https://github.com/kubernetes-sigs/metrics-server/releases/download/$(METRICS_SERVER_VERSION)/components.yaml" >/dev/null
+	kubectl -n kube-system get deployment metrics-server -o jsonpath='{.spec.template.spec.containers[0].args}' | grep -q kubelet-insecure-tls || \
+	  kubectl -n kube-system patch deployment metrics-server --type=json \
+	    -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]' >/dev/null
+	kubectl -n kube-system rollout status deploy/metrics-server --timeout=90s
 	kubectl get nodes -o wide
 
 up: deps registry cluster
@@ -132,8 +133,6 @@ smoke:
 	  curl -fsS http://agent.$(NAMESPACE).svc.cluster.local/healthz
 	echo "SMOKE OK"
 
-# the registry is a separate container, so it survives `down` with every
-# cached image layer intact — `clean` is what actually throws that away.
 down:
 	-kind delete cluster --name $(CLUSTER_NAME)
 

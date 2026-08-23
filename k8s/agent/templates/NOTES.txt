@@ -1,7 +1,11 @@
 The Agent service has been deployed as release {{ .Release.Name | quote }} in namespace {{ .Release.Namespace | quote }}.
 
   Image:     {{ include "agent.image" . }}
+  {{- if .Values.autoscaling.enabled }}
+  Replicas:  {{ .Values.autoscaling.minReplicas }}-{{ .Values.autoscaling.maxReplicas }} (HPA, target {{ .Values.autoscaling.targetCPUUtilizationPercentage }}% CPU)
+  {{- else }}
   Replicas:  {{ .Values.replicaCount }}
+  {{- end }}
   Service:   {{ include "agent.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
 
 1. Watch the rollout:

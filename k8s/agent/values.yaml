@@ -48,16 +48,25 @@ containerPort: 8000
 # here. Changing any value rolls the Pods via the checksum annotation.
 config:
   AGENT_LOG_LEVEL: INFO
+  # set once the Inference Server and Vector DB land on their real service names
   # AGENT_LLM_URL: http://ollama.llm.svc.cluster.local:11434/v1
   # AGENT_QDRANT_URL: http://qdrant.vector.svc.cluster.local:6333
 
-# NEVER put secrets in `config` — it becomes a plain ConfigMap. Reference a
-# Secret here instead:
-#   extraEnvFrom:
-#     - secretRef:
-#         name: agent-secrets
+# Rendered into a Secret (stringData) with the same envFrom treatment as
+# `config` above. Set via -f values-<env>.yaml or --set-string, never
+# committed with real values.
+secrets: {}
+  # AGENT_LLM_API_KEY: ""
+  # AGENT_QDRANT_API_KEY: ""
+
 extraEnv: []
 extraEnvFrom: []
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
 
 # Both requests and limits are set: requests drive scheduling, limits stop one
 # replica from starving its node.
