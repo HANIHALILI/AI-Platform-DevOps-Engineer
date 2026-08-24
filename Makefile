@@ -5,8 +5,6 @@ SHELL := /bin/bash
 
 CLUSTER_NAME   ?= ai-platform-cluster
 KIND_CONFIG    ?= k8s/kind-config.yaml
-# Pinned by digest so the Kubernetes version cannot move under an existing cluster.
-NODE_IMAGE     ?= kindest/node:v1.34.8@sha256:02722c2dedddcfc00febf5d27fbeb9b7b2c14294c82109ff4a85d89ac9ba3256
 METRICS_SERVER_VERSION ?= v0.7.2
 
 # One container under two names: localhost:5001 from the host, kind-registry:5000
@@ -50,10 +48,12 @@ registry:
 	curl -fsS --retry 10 --retry-delay 2 --retry-connrefused \
 	  http://localhost:$(REGISTRY_PORT)/v2/_catalog >/dev/null
 
+# No --image, so kind uses the node image it built itself: the image and the
+# installed kind can never drift apart. The Kubernetes version then follows
+# whoever's kind is installed, and helm enforces the chart's kubeVersion floor.
 cluster:
 	@kind get clusters 2>/dev/null | grep -qx $(CLUSTER_NAME) || \
-	  kind create cluster --name $(CLUSTER_NAME) --config $(KIND_CONFIG) \
-	    --image $(NODE_IMAGE) --wait 180s
+	  kind create cluster --name $(CLUSTER_NAME) --config $(KIND_CONFIG) --wait 180s
 	kubectl config use-context kind-$(CLUSTER_NAME) >/dev/null
 
 	# kind-config.yaml points containerd at /etc/containerd/certs.d; this is the
