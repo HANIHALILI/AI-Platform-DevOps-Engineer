@@ -1,10 +1,11 @@
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi import FastAPI, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
@@ -18,10 +19,12 @@ from app.observability import (
     request_id_middleware,
     setup_logging,
 )
-from app.rag import Rag
+from app.rag import Rag, RagUnavailable
 from app.tools import build_tools
 
 READY_TIMEOUT = 5
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+INDEX = Path(__file__).parent / "static" / "index.html"
 
 
 @asynccontextmanager
@@ -38,6 +41,12 @@ app.middleware("http")(request_id_middleware)
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
+
+
+# Served by the app itself, so the page rides the NodePort the agent already has.
+@app.get("/")
+async def index():
+    return FileResponse(INDEX)
 
 
 @app.post("/chat")
@@ -83,6 +92,19 @@ async def chat(body: ChatRequest, request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/documents")
+async def documents(file: UploadFile, request: Request):
+    raw = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        return JSONResponse({"error": "file is larger than 2 MB"}, status_code=413)
+    try:
+        chunks = await request.app.state.rag.ingest(file.filename, raw.decode("utf-8", "replace"))
+    except RagUnavailable as exc:
+        event("ingest_failed", logging.WARNING, error=str(exc))
+        return JSONResponse({"error": "knowledge base unavailable"}, status_code=503)
+    return {"file": file.filename, "chunks": chunks}
 
 
 # Liveness must not touch external services, or a slow model load becomes CrashLoopBackOff.

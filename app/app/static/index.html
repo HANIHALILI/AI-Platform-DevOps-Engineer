@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --border: #e2e5ea;
+    --text: #1a1d21;
+    --muted: #6b7280;
+    --accent: #2f6feb;
+    --accent-soft: #e8effd;
+    --ok: #1a7f4b;
+    --ok-soft: #e6f4ec;
+    --err: #c0392b;
+    --err-soft: #fbeae8;
+    --tool: #8250df;
+    --tool-soft: #f2ecfd;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --panel: #1c1f24;
+      --border: #2c3038;
+      --text: #e6e8eb;
+      --muted: #9aa1ab;
+      --accent: #5b8def;
+      --accent-soft: #1e2738;
+      --ok: #4ec98a;
+      --ok-soft: #17281f;
+      --err: #f2796b;
+      --err-soft: #2a1a19;
+      --tool: #b28cf5;
+      --tool-soft: #221c31;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .health { margin-left: auto; display: flex; gap: 8px; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .dot.up { background: var(--ok); }
+  .dot.down { background: var(--err); }
+
+  main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 20px;
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    align-items: start;
+  }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+
+  #drop {
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  #drop:hover, #drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+  #drop strong { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
+  #drop .hint { font-size: 12px; }
+
+  #files { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+  #files li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+  #files .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #files .meta { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  #files li.failed .meta { color: var(--err); }
+
+  #log { display: grid; gap: 16px; }
+  .turn { display: grid; gap: 10px; }
+  .ask {
+    justify-self: end;
+    max-width: 80%;
+    background: var(--accent);
+    color: #fff;
+    padding: 9px 14px;
+    border-radius: 14px 14px 4px 14px;
+    white-space: pre-wrap;
+  }
+  .events { display: grid; gap: 8px; }
+
+  .card {
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--panel);
+    font-size: 14px;
+  }
+  .card .head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .card .head .type { font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+  .card .head .at { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .card pre {
+    margin: 8px 0 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+  }
+
+  .card.tool_call { border-left-color: var(--tool); background: var(--tool-soft); }
+  .card.tool_call .type { color: var(--tool); }
+  .card.tool_result { border-left-color: var(--ok); background: var(--ok-soft); }
+  .card.tool_result .type { color: var(--ok); }
+  .card.tool_result.bad { border-left-color: var(--err); background: var(--err-soft); }
+  .card.tool_result.bad .type { color: var(--err); }
+  .card.error { border-left-color: var(--err); background: var(--err-soft); }
+  .card.error .type { color: var(--err); }
+
+  .answer {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: var(--panel);
+    white-space: pre-wrap;
+  }
+  .answer .caret {
+    display: inline-block;
+    width: 7px;
+    height: 15px;
+    margin-left: 2px;
+    vertical-align: -2px;
+    background: var(--accent);
+    animation: blink 1s steps(2, start) infinite;
+  }
+  @keyframes blink { to { visibility: hidden; } }
+
+  .done {
+    display: flex;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  details.raw { font-size: 12px; }
+  details.raw summary { color: var(--muted); cursor: pointer; }
+  details.raw pre {
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    max-height: 260px;
+    overflow: auto;
+    white-space: pre;
+  }
+
+  form {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    position: sticky;
+    bottom: 0;
+    background: var(--bg);
+    padding-bottom: 4px;
+  }
+  textarea {
+    flex: 1;
+    resize: none;
+    font: inherit;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    min-height: 44px;
+    max-height: 160px;
+  }
+  textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button {
+    font: inherit;
+    font-weight: 500;
+    padding: 0 20px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .examples button {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 11px;
+    font-size: 12.5px;
+  }
+  .examples button:hover { color: var(--text); border-color: var(--accent); }
+  .empty { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Agent</h1>
+  <span class="sub">FastAPI · LangGraph · Qdrant · Ollama</span>
+  <div class="health">
+    <span class="pill"><span class="dot" id="dot-llm"></span> LLM</span>
+    <span class="pill"><span class="dot" id="dot-qdrant"></span> Qdrant</span>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Knowledge base</h2>
+    <div id="drop">
+      <strong>Drop a file here</strong>
+      <span class="hint">or click to choose · .md and .txt · up to 2 MB</span>
+    </div>
+    <input type="file" id="picker" multiple accept=".md,.txt,text/plain,text/markdown" hidden>
+    <ul id="files"></ul>
+    <p class="empty" id="files-empty">Uploads are split into chunks, embedded, and stored in Qdrant.
+      The agent reaches them through its <code>search_docs</code> tool.</p>
+  </section>
+
+  <section>
+    <div id="log"></div>
+    <p class="empty" id="log-empty">Ask something. Every SSE frame the server sends is shown below as
+      it arrives — tool calls, tool results, streamed tokens, and the terminal event.</p>
+    <div class="examples">
+      <button type="button" data-ask="What time is it in Asia/Jerusalem?">clock tool</button>
+      <button type="button" data-ask="What do the internal docs say about onboarding?">search tool</button>
+      <button type="button" data-ask="Hello, who are you?">plain answer</button>
+    </div>
+    <form id="form">
+      <textarea id="input" placeholder="Ask the agent…  (Enter to send, Shift+Enter for a newline)" rows="1"></textarea>
+      <button id="send">Send</button>
+    </form>
+  </section>
+</main>
+
+<script>
+const $ = (sel) => document.querySelector(sel);
+const el = (tag, cls, text) => {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+
+// health ---------------------------------------------------------------------
+
+async function health() {
+  try {
+    const r = await fetch("/readyz");
+    const body = await r.json();
+    $("#dot-llm").className = "dot " + (body.llm ? "up" : "down");
+    $("#dot-qdrant").className = "dot " + (body.qdrant ? "up" : "down");
+  } catch {
+    $("#dot-llm").className = $("#dot-qdrant").className = "dot down";
+  }
+}
+health();
+setInterval(health, 15000);
+
+// uploads --------------------------------------------------------------------
+
+const files = $("#files");
+
+async function upload(file) {
+  const row = el("li");
+  row.append(el("span", "name", file.name));
+  const meta = el("span", "meta", "uploading…");
+  row.append(meta);
+  files.append(row);
+  $("#files-empty").hidden = true;
+
+  const body = new FormData();
+  body.append("file", file);
+  try {
+    const r = await fetch("/documents", { method: "POST", body });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.status);
+    meta.textContent = data.chunks + (data.chunks === 1 ? " chunk" : " chunks");
+  } catch (err) {
+    row.classList.add("failed");
+    meta.textContent = String(err.message || err);
+  }
+  health();
+}
+
+const drop = $("#drop");
+drop.addEventListener("click", () => $("#picker").click());
+$("#picker").addEventListener("change", (e) => {
+  [...e.target.files].forEach(upload);
+  e.target.value = "";
+});
+["dragenter", "dragover"].forEach((name) =>
+  drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((name) =>
+  drop.addEventListener(name, () => drop.classList.remove("over")));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  [...e.dataTransfer.files].forEach(upload);
+});
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", (e) => e.preventDefault());
+
+// chat -----------------------------------------------------------------------
+
+const log = $("#log");
+const input = $("#input");
+const send = $("#send");
+
+function turn(question) {
+  const wrap = el("div", "turn");
+  wrap.append(el("div", "ask", question));
+  const events = el("div", "events");
+  wrap.append(events);
+  const raw = el("details", "raw");
+  const summary = el("summary", null, "raw SSE");
+  const pre = el("pre");
+  raw.append(summary, pre);
+  wrap.append(raw);
+  log.append(wrap);
+  $("#log-empty").hidden = true;
+  wrap.scrollIntoView({ block: "start", behavior: "smooth" });
+  return { events, raw, summary, pre };
+}
+
+function card(kind, label, at) {
+  const node = el("div", "card " + kind);
+  const head = el("div", "head");
+  head.append(el("span", "type", label));
+  head.append(el("span", "at", at));
+  node.append(head);
+  return node;
+}
+
+const stamp = (t0) => "+" + ((performance.now() - t0) / 1000).toFixed(2) + "s";
+
+async function ask(question) {
+  const view = turn(question);
+  const t0 = performance.now();
+  let frames = 0;
+  let answer = null;
+  let tokens = 0;
+
+  const show = (payload) => {
+    const at = stamp(t0);
+    if (payload.type === "token") {
+      tokens++;
+      if (!answer) {
+        answer = el("div", "answer");
+        answer.append(el("span", "text"));
+        answer.append(el("span", "caret"));
+        view.events.append(answer);
+      }
+      answer.querySelector(".text").textContent += payload.content;
+      return;
+    }
+    if (payload.type === "tool_call") {
+      const node = card("tool_call", "tool call · " + payload.name, at);
+      node.append(el("pre", null, JSON.stringify(payload.args, null, 2)));
+      view.events.append(node);
+      return;
+    }
+    if (payload.type === "tool_result") {
+      const node = card("tool_result" + (payload.ok ? "" : " bad"),
+        "tool result · " + payload.name + (payload.ok ? "" : " · failed"), at);
+      node.append(el("pre", null, payload.preview));
+      view.events.append(node);
+      return;
+    }
+    if (payload.type === "error") {
+      const node = card("error", "error", at);
+      node.append(el("pre", null, payload.message));
+      view.events.append(node);
+      return;
+    }
+    if (payload.type === "done") {
+      const meta = el("div", "done");
+      meta.append(el("span", null, payload.iterations +
+        (payload.iterations === 1 ? " agent step" : " agent steps")));
+      meta.append(el("span", null, tokens + " token events"));
+      meta.append(el("span", null, "finished " + at));
+      view.events.append(meta);
+    }
+  };
+
+  const finish = () => {
+    if (answer) answer.querySelector(".caret").remove();
+    view.summary.textContent = "raw SSE · " + frames + " frames";
+  };
+
+  try {
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: question }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+
+    // The stream is parsed by hand rather than with EventSource, which only speaks GET.
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, cut);
+        buffer = buffer.slice(cut + 2);
+        const line = frame.split("\n").find((l) => l.startsWith("data: "));
+        if (!line) continue;
+        frames++;
+        view.pre.textContent += stamp(t0).padStart(7) + "  " + line + "\n";
+        show(JSON.parse(line.slice(6)));
+      }
+    }
+  } catch (err) {
+    const node = card("error", "transport error", stamp(t0));
+    node.append(el("pre", null, String(err.message || err)));
+    view.events.append(node);
+  }
+  finish();
+}
+
+async function submit() {
+  const question = input.value.trim();
+  if (!question || send.disabled) return;
+  input.value = "";
+  input.style.height = "auto";
+  send.disabled = true;
+  await ask(question);
+  send.disabled = false;
+  input.focus();
+}
+
+$("#form").addEventListener("submit", (e) => { e.preventDefault(); submit(); });
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+});
+input.addEventListener("input", () => {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 160) + "px";
+});
+document.querySelectorAll(".examples button").forEach((b) =>
+  b.addEventListener("click", () => { input.value = b.dataset.ask; submit(); }));
+</script>
+</body>
+</html>

@@ -18,6 +18,12 @@ EMBED_TIMEOUT = 30
 class RagUnavailable(Exception): ...
 
 
+def _splitter() -> RecursiveCharacterTextSplitter:
+    return RecursiveCharacterTextSplitter(
+        chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap
+    )
+
+
 class Hit(NamedTuple):
     text: str
     source: str
@@ -44,6 +50,24 @@ class Rag:
             )
         return self._store
 
+    # Additive, unlike rebuild: afrom_documents creates the collection when it does not exist yet
+    # and appends to it when it does.
+    async def ingest(self, name: str, text: str) -> int:
+        chunks = _splitter().create_documents([text], metadatas=[{"source": name}])
+        if not chunks:
+            return 0
+        try:
+            await QdrantVectorStore.afrom_documents(
+                chunks,
+                embedding=self.embeddings,
+                url=settings.qdrant_url,
+                api_key=settings.qdrant_key,
+                collection_name=settings.collection,
+            )
+        except Exception as exc:
+            raise RagUnavailable(type(exc).__name__) from exc
+        return len(chunks)
+
     async def search(self, query: str, k: int) -> list[Hit]:
         try:
             store = await self._connect()
@@ -65,10 +89,7 @@ class Rag:
             ]
 
         files, docs = await asyncio.to_thread(load)
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap
-        )
-        chunks = splitter.split_documents(docs)
+        chunks = _splitter().split_documents(docs)
         await QdrantVectorStore.afrom_documents(
             chunks,
             embedding=self.embeddings,
