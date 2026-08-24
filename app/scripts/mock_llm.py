@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import math
+import os
 import time
 import uuid
 
@@ -120,4 +121,4 @@ async def embeddings(request: Request):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8080, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("MOCK_PORT", 8080)), log_level="warning")

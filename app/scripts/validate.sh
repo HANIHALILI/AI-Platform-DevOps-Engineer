@@ -4,8 +4,8 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-APP_PORT=8000
-MOCK_PORT=8080
+APP_PORT=${APP_PORT:-8000}
+export MOCK_PORT=${MOCK_PORT:-8080}
 export AGENT_LLM_URL="http://127.0.0.1:${MOCK_PORT}/v1"
 export AGENT_EMBED_URL="http://127.0.0.1:${MOCK_PORT}"
 export AGENT_QDRANT_URL="http://127.0.0.1:9"
@@ -20,12 +20,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Checks the process too: a server that could not bind its port is already gone, and
+# without this the loop waits out its full budget on whoever else holds that port.
 wait_for() {
-  for _ in $(seq 1 60); do
-    curl -sf "$1" >/dev/null 2>&1 && return 0
+  local url=$1 pid=$2 name=$3
+  for _ in $(seq 1 30); do
+    kill -0 "$pid" 2>/dev/null || { echo "$name died on startup" >&2; return 1; }
+    curl -sf --max-time 2 "$url" >/dev/null 2>&1 && return 0
     sleep 1
   done
-  echo "timed out waiting for $1" >&2
+  echo "timed out waiting for $name" >&2
   return 1
 }
 
@@ -34,8 +38,8 @@ MOCK_PID=$!
 uv run uvicorn app.main:app --host 127.0.0.1 --port "$APP_PORT" --log-level warning &
 APP_PID=$!
 
-wait_for "http://127.0.0.1:${MOCK_PORT}/v1/models" || exit 1
-wait_for "http://127.0.0.1:${APP_PORT}/healthz" || exit 1
+wait_for "http://127.0.0.1:${MOCK_PORT}/v1/models" "$MOCK_PID" "the mock server on port ${MOCK_PORT}" || exit 1
+wait_for "http://127.0.0.1:${APP_PORT}/healthz" "$APP_PID" "the app on port ${APP_PORT}" || exit 1
 
 # -N is required, or curl buffers and streaming looks broken.
 ask() {
