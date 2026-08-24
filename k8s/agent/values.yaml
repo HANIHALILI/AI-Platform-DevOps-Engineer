@@ -155,10 +155,8 @@ topologySpread:
   topologyKey: kubernetes.io/hostname
   whenUnsatisfiable: DoNotSchedule
 
-# maxSurge MUST stay 0 while topologySpread is DoNotSchedule and replicas equal
-# the number of eligible nodes — a surge Pod would have nowhere to schedule and
-# the rollout would deadlock in Pending. The chart refuses to render an
-# incompatible combination rather than letting you discover it mid-upgrade.
+# maxSurge stays 0: with topologySpread on DoNotSchedule a surge Pod has no node
+# left to land on and the rollout deadlocks in Pending.
 updateStrategy:
   type: RollingUpdate
   rollingUpdate:
