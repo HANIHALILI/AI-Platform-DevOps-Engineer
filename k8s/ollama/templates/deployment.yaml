@@ -75,6 +75,8 @@ spec:
           env:
             - name: HOME
               value: /models
+            - name: OLLAMA_CONTEXT_LENGTH
+              value: {{ .Values.contextLength | quote }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           resources:

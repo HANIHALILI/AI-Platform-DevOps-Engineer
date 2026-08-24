@@ -13,6 +13,10 @@ models:
   - llama3.2:3b
   - all-minilm
 
+# Ollama defaults to 2048, which the system prompt plus a search_docs result
+# overflows — and it drops the oldest messages silently when it does.
+contextLength: 8192
+
 service:
   type: ClusterIP
   # Ollama's own port, and the one app/app/config.py defaults to.
