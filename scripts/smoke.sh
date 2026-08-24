@@ -2,7 +2,7 @@
 # Checks the deployed stack against a live cluster. Run after `make deploy`.
 set -euo pipefail
 
-NS=${NAMESPACE:-default}
+NS=${NAMESPACE:-ai-platform}
 
 fail() { echo "FAILED: $1" >&2; exit 1; }
 

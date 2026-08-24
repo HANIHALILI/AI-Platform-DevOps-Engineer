@@ -107,7 +107,7 @@ deploy-agent:
 all: up build push deploy
 
 smoke:
-	@bash scripts/smoke.sh
+	@NAMESPACE=$(NAMESPACE) bash scripts/smoke.sh
 
 down:
 	-kind delete cluster --name $(CLUSTER_NAME)
