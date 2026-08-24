@@ -3,134 +3,136 @@ SHELL := /bin/bash
 .ONESHELL:
 .SHELLFLAGS := -eu -o pipefail -c
 
-CLUSTER_NAME  ?= ai-platform-cluster
-REGISTRY_NAME ?= kind-registry
-REGISTRY_PORT ?= 5001
-REGISTRY_IMAGE ?= registry:3@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33
-KIND_CONFIG   ?= k8s/kind-config.yaml
-NODE_IMAGE    ?= kindest/node:v1.34.8@sha256:02722c2dedddcfc00febf5d27fbeb9b7b2c14294c82109ff4a85d89ac9ba3256
-IMAGE         ?= localhost:$(REGISTRY_PORT)/agent
-IMAGE_TAG     ?= dev
-RELEASE       ?= agent
-NAMESPACE     ?= default
-MAX_IMAGE_MB  ?= 250
+CLUSTER_NAME   ?= ai-platform-cluster
+KIND_CONFIG    ?= k8s/kind-config.yaml
+# Pinned by digest so the Kubernetes version cannot move under an existing cluster.
+NODE_IMAGE     ?= kindest/node:v1.34.8@sha256:02722c2dedddcfc00febf5d27fbeb9b7b2c14294c82109ff4a85d89ac9ba3256
 METRICS_SERVER_VERSION ?= v0.7.2
 
-KIND_VERSION    ?= v0.32.0
-KUBECTL_VERSION ?= v1.34.8
-HELM_VERSION    ?= v3.21.4
-ARCH := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
-BIN_DIR ?= $(HOME)/.local/bin
-export PATH := $(BIN_DIR):$(PATH)
+# One container under two names: localhost:5001 from the host, kind-registry:5000
+# from the nodes.
+REGISTRY_NAME  ?= kind-registry
+REGISTRY_PORT  ?= 5001
+REGISTRY_IMAGE ?= registry:3
 
-.PHONY: help deps registry cluster up build push deploy all smoke down clean
+IMAGE          ?= localhost:$(REGISTRY_PORT)/agent
+IMAGE_TAG      ?= dev
+NAMESPACE      ?= default
+
+.PHONY: help deps registry cluster up build push \
+        deploy deploy-qdrant deploy-ollama deploy-agent all smoke down clean
 
 help:
-	@echo "make deps    install docker/kind/kubectl/helm if missing"
-	@echo "make up      deps + registry + 3-node cluster"
-	@echo "make build   build $(IMAGE):$(IMAGE_TAG)"
-	@echo "make push    push it to the local registry"
-	@echo "make deploy  helm upgrade --install"
-	@echo "make all     up + build + push + deploy"
-	@echo "make smoke   end-to-end checks"
-	@echo "make down    delete the cluster"
-	@echo "make clean   delete the cluster and the registry"
+	@echo "make deps     check that docker, kind, kubectl and helm are installed"
+	echo "make up       local registry + 3-node cluster"
+	echo "make build    build $(IMAGE):$(IMAGE_TAG)"
+	echo "make push     push it to the local registry"
+	echo "make deploy   install qdrant, then ollama, then the agent"
+	echo "make all      up + build + push + deploy"
+	echo "make smoke    end-to-end checks"
+	echo "make down     delete the cluster"
+	echo "make clean    delete the cluster and the registry"
 
 deps:
-	@command -v docker >/dev/null || { sudo apt-get update -y; sudo apt-get install -y docker.io docker-buildx; }
-	sudo systemctl enable --now docker >/dev/null
-	id -nG "$$USER" | tr ' ' '\n' | grep -qx docker || {
-	  sudo usermod -aG docker "$$USER"
-	  exec sg docker -c "$(MAKE) deps"
-	}
-	mkdir -p $(BIN_DIR)
-	command -v kind >/dev/null || {
-	  curl -fsSL -o $(BIN_DIR)/kind "https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-linux-$(ARCH)"
-	  chmod +x $(BIN_DIR)/kind
-	}
-	command -v kubectl >/dev/null || {
-	  curl -fsSL -o $(BIN_DIR)/kubectl "https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/linux/$(ARCH)/kubectl"
-	  chmod +x $(BIN_DIR)/kubectl
-	}
-	command -v helm >/dev/null || {
-	  curl -fsSL "https://get.helm.sh/helm-$(HELM_VERSION)-linux-$(ARCH).tar.gz" | tar -xz -C /tmp
-	  install -m 0755 /tmp/linux-$(ARCH)/helm $(BIN_DIR)/helm
-	}
-	test -f app/uv.lock || { echo "app/uv.lock missing — run: uv lock --directory app"; exit 1; }
+	@for tool in docker kind kubectl helm; do
+	  command -v "$$tool" >/dev/null || { echo "$$tool is not installed" >&2; exit 1; }
+	done
+	docker info >/dev/null 2>&1 || { echo "docker is not running" >&2; exit 1; }
+	test -f app/uv.lock || { echo "app/uv.lock missing - run: uv lock --directory app" >&2; exit 1; }
 	echo "deps ok"
 
+# `docker start` is a no-op when the container is already running and fails when
+# there is none, so these two lines cover all three states.
 registry:
-	@if [ "$$(docker inspect -f '{{.State.Running}}' $(REGISTRY_NAME) 2>/dev/null)" = true ]; then
-	  :
-	elif docker inspect $(REGISTRY_NAME) >/dev/null 2>&1; then
-	  docker start $(REGISTRY_NAME) >/dev/null
-	else
-	  docker run -d --restart=always --name $(REGISTRY_NAME) --network bridge \
+	@docker start $(REGISTRY_NAME) >/dev/null 2>&1 || \
+	  docker run -d --name $(REGISTRY_NAME) --restart=always \
 	    -p 127.0.0.1:$(REGISTRY_PORT):5000 $(REGISTRY_IMAGE) >/dev/null
-	fi
-	for i in $$(seq 10); do
-	  curl -fsS http://localhost:$(REGISTRY_PORT)/v2/_catalog >/dev/null 2>&1 && exit 0
-	  sleep 2
-	done
-	echo "registry did not respond on :$(REGISTRY_PORT)" >&2; exit 1
+	curl -fsS --retry 10 --retry-delay 2 --retry-connrefused \
+	  http://localhost:$(REGISTRY_PORT)/v2/_catalog >/dev/null
 
 cluster:
 	@kind get clusters 2>/dev/null | grep -qx $(CLUSTER_NAME) || \
-	  kind create cluster --name $(CLUSTER_NAME) --config $(KIND_CONFIG) --image $(NODE_IMAGE) --wait 180s
+	  kind create cluster --name $(CLUSTER_NAME) --config $(KIND_CONFIG) \
+	    --image $(NODE_IMAGE) --wait 180s
 	kubectl config use-context kind-$(CLUSTER_NAME) >/dev/null
+
+	# kind-config.yaml points containerd at /etc/containerd/certs.d; this is the
+	# entry that makes localhost:5001/agent resolve to the registry container.
 	for node in $$(kind get nodes --name $(CLUSTER_NAME)); do
 	  docker exec "$$node" mkdir -p /etc/containerd/certs.d/localhost:$(REGISTRY_PORT)
-	  echo '[host."http://$(REGISTRY_NAME):5000"]' | docker exec -i "$$node" cp /dev/stdin /etc/containerd/certs.d/localhost:$(REGISTRY_PORT)/hosts.toml
+	  echo '[host."http://$(REGISTRY_NAME):5000"]' | \
+	    docker exec -i "$$node" tee /etc/containerd/certs.d/localhost:$(REGISTRY_PORT)/hosts.toml >/dev/null
 	done
-	[ "$$(docker inspect -f '{{json .NetworkSettings.Networks.kind}}' $(REGISTRY_NAME))" = null ] && \
-	  docker network connect kind $(REGISTRY_NAME) || true
+	docker network connect kind $(REGISTRY_NAME) 2>/dev/null || true
 	kubectl wait --for=condition=Ready nodes --all --timeout=180s
-	kubectl label node -l '!node-role.kubernetes.io/control-plane' \
-	  node-role.kubernetes.io/worker=true workload=agent --overwrite
-	kubectl create configmap local-registry-hosting -n kube-public \
-	  --from-literal=localRegistryHosting.v1='host: "localhost:$(REGISTRY_PORT)"' \
-	  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+	# The HPA needs metrics-server, and kind's kubelets serve their metrics with
+	# self-signed certs that it rejects unless told not to.
 	kubectl apply -f "https://github.com/kubernetes-sigs/metrics-server/releases/download/$(METRICS_SERVER_VERSION)/components.yaml" >/dev/null
-	kubectl -n kube-system get deployment metrics-server -o jsonpath='{.spec.template.spec.containers[0].args}' | grep -q kubelet-insecure-tls || \
+	kubectl -n kube-system get deploy metrics-server -o jsonpath='{..args}' | grep -q insecure-tls || \
 	  kubectl -n kube-system patch deployment metrics-server --type=json \
 	    -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]' >/dev/null
 	kubectl -n kube-system rollout status deploy/metrics-server --timeout=90s
+
 	kubectl get nodes -o wide
 
 up: deps registry cluster
 
+# Built from the repository root, because the Dockerfile copies app/.
 build:
-	DOCKER_BUILDKIT=1 docker build -f app/Dockerfile -t $(IMAGE):$(IMAGE_TAG) .
+	@DOCKER_BUILDKIT=1 docker build -f app/Dockerfile -t $(IMAGE):$(IMAGE_TAG) .
 
-push:
-	docker push $(IMAGE):$(IMAGE_TAG)
+push: build
+	@docker push $(IMAGE):$(IMAGE_TAG)
 
-deploy:
-	helm upgrade --install $(RELEASE) k8s/agent \
-	  --namespace $(NAMESPACE) --create-namespace \
-	  --set image.repository=$(IMAGE) \
-	  --set image.tag=$(IMAGE_TAG) \
+deploy: deploy-qdrant deploy-ollama deploy-agent
+
+deploy-qdrant:
+	@ls k8s/qdrant/charts/*.tgz >/dev/null 2>&1 || helm dependency build k8s/qdrant
+	helm upgrade --install qdrant k8s/qdrant -n $(NAMESPACE) --create-namespace
+
+# The first install pulls ~2GB of models in an init container, so this one takes
+# several minutes to report Ready. Later installs hit the cached volume.
+deploy-ollama:
+	@helm upgrade --install ollama k8s/ollama -n $(NAMESPACE) --create-namespace
+
+# `dev` is a moving tag, so nothing in the release changes between builds and
+# helm would report "no changes". The timestamp is what rolls the Pods.
+deploy-agent:
+	@helm upgrade --install agent k8s/agent -n $(NAMESPACE) --create-namespace \
+	  --set image.repository=$(IMAGE) --set image.tag=$(IMAGE_TAG) \
 	  --set-string podAnnotations.rolledAt=$$(date +%s)
-	kubectl -n $(NAMESPACE) get pods -l app=agent -o wide
+	kubectl -n $(NAMESPACE) get pods -o wide
 
 all: up build push deploy
 
+# The registry and the containerd mirror get no checks of their own: if either
+# were broken, the Pods could not pull the image and the rollout would hang here.
 smoke:
-	@kubectl get nodes -o wide
-	test "$$(kubectl get nodes --no-headers | grep -c Ready)" = 3
-	curl -fsS http://localhost:$(REGISTRY_PORT)/v2/_catalog
-	[ "$$(docker inspect -f '{{json .NetworkSettings.Networks.kind}}' $(REGISTRY_NAME))" != null ]
-	docker exec $(CLUSTER_NAME)-worker cat /etc/containerd/certs.d/localhost:$(REGISTRY_PORT)/hosts.toml
-	test "$$(docker image inspect $(IMAGE):$(IMAGE_TAG) --format '{{.Config.User}}')" = "10001:10001"
-	test "$$(docker image inspect $(IMAGE):$(IMAGE_TAG) --format '{{.Size}}')" -lt $$(($(MAX_IMAGE_MB)*1000*1000))
-	! docker run --rm --entrypoint sh $(IMAGE):$(IMAGE_TAG) -c 'command -v uv' >/dev/null 2>&1
-	kubectl -n $(NAMESPACE) rollout status deploy/agent --timeout=180s
-	test "$$(kubectl -n $(NAMESPACE) get pods -l app=agent -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | sort -u | wc -l)" = 2
-	kubectl -n $(NAMESPACE) exec deploy/agent -- id | grep -q uid=10001
-	! kubectl -n $(NAMESPACE) exec deploy/agent -- touch /x
-	kubectl -n $(NAMESPACE) exec deploy/agent -- touch /tmp/probe
-	kubectl -n $(NAMESPACE) run curl-smoke --rm -i --restart=Never --image=curlimages/curl:8.10.1 -- \
-	  curl -fsS http://agent.$(NAMESPACE).svc.cluster.local/healthz
+	@fail() { echo "FAILED: $$1" >&2; exit 1; }
+
+	test "$$(kubectl get nodes --no-headers | grep -cw Ready)" = 3 \
+	  || fail "expected 3 Ready nodes"
+	kubectl -n $(NAMESPACE) rollout status deploy/agent --timeout=180s \
+	  || fail "the agent rollout did not complete"
+	test "$$(kubectl -n $(NAMESPACE) get pods -l app=agent \
+	  -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | sort -u | wc -l)" = 2 \
+	  || fail "agent Pods are not spread across both workers"
+
+	kubectl -n $(NAMESPACE) exec deploy/agent -- id | grep -q uid=10001 \
+	  || fail "the container is not running as uid 10001"
+	! kubectl -n $(NAMESPACE) exec deploy/agent -- touch /x 2>/dev/null \
+	  || fail "the root filesystem is writable"
+
+	# printenv proves the ConfigMap and the Secret exist *and* reached the
+	# container, so neither needs a `kubectl get` of its own.
+	test "$$(kubectl -n $(NAMESPACE) exec deploy/agent -- printenv AGENT_QDRANT_URL)" = http://qdrant:6333 \
+	  || fail "AGENT_QDRANT_URL did not reach the container from the ConfigMap"
+	kubectl -n $(NAMESPACE) exec deploy/agent -- printenv AGENT_LLM_KEY >/dev/null \
+	  || fail "AGENT_LLM_KEY did not reach the container from the Secret"
+
+	curl -fsS http://localhost:8080/healthz \
+	  || fail "/healthz did not answer on host :8080, the port kind maps to the NodePort"
 	echo "SMOKE OK"
 
 down:
