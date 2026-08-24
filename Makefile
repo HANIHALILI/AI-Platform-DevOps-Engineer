@@ -15,7 +15,7 @@ REGISTRY_IMAGE ?= registry:3
 
 IMAGE          ?= localhost:$(REGISTRY_PORT)/agent
 IMAGE_TAG      ?= dev
-NAMESPACE      ?= default
+NAMESPACE      ?= ai-platform
 
 .PHONY: help deps registry cluster up build push \
         deploy deploy-qdrant deploy-ollama deploy-agent all smoke down clean
