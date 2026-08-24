@@ -1,0 +1,10 @@
+Ollama is reachable in-cluster at:
+
+    http://{{ include "ollama.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+{{ if .Values.models -}}
+The Pod stays in Init while it downloads {{ .Values.models | join ", " }}:
+
+    kubectl -n {{ .Release.Namespace }} logs -f -l app={{ include "ollama.name" . }} -c pull-models
+    kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "ollama.fullname" . }} --timeout=900s
+{{ end -}}

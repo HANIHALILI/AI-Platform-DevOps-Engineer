@@ -30,34 +30,51 @@ podAnnotations: {}
 podLabels: {}
 
 service:
-  type: ClusterIP
+  # The agent is the only piece of the stack meant to be called from outside;
+  # Ollama and Qdrant stay ClusterIP. 30080 is the port k8s/kind-config.yaml
+  # maps to host :8080, so the service answers on http://localhost:8080.
+  type: NodePort
   port: 80
   # Named port on the container; see `containerPort` below.
   targetPort: http
-  # Only used when type is NodePort. 30080 is the port k8s/kind-config.yaml maps to
-  # host :8080, so `--set service.type=NodePort` makes the Agent service
-  # reachable at http://localhost:8080 from the host.
-  nodePort: null
+  # Only used when type is NodePort.
+  nodePort: 30080
   annotations: {}
 
 containerPort: 8000
 
 # Non-secret configuration, rendered into a ConfigMap and consumed with
 # `envFrom`. app/app/config.py reads every setting from the environment with
-# env_prefix="AGENT_", and all of them have defaults, so only overrides belong
-# here. Changing any value rolls the Pods via the checksum annotation.
+# env_prefix="AGENT_"; anything left out here keeps the default it declares.
+# Changing any value rolls the Pods via the checksum annotation.
 config:
   AGENT_LOG_LEVEL: INFO
-  # set once the Inference Server and Vector DB land on their real service names
-  # AGENT_LLM_URL: http://ollama.llm.svc.cluster.local:11434/v1
-  # AGENT_QDRANT_URL: http://qdrant.vector.svc.cluster.local:6333
+  # The two dependencies, addressed by Service name in this namespace. They
+  # happen to equal the defaults in app/app/config.py, and are still spelled
+  # out: where the agent connects belongs in the cluster's configuration, not
+  # in the image. /v1 is the OpenAI-compatible API Ollama serves; the
+  # embeddings client uses Ollama's own API at the root.
+  AGENT_LLM_URL: http://ollama:11434/v1
+  AGENT_EMBED_URL: http://ollama:11434
+  AGENT_QDRANT_URL: http://qdrant:6333
+  # Must stay in step with `models` in k8s/ollama/values.yaml — Ollama only
+  # pulls what is listed there.
+  AGENT_LLM_MODEL: llama3.2:3b
+  AGENT_EMBED_MODEL: all-minilm
 
 # Rendered into a Secret (stringData) with the same envFrom treatment as
-# `config` above. Set via -f values-<env>.yaml or --set-string, never
-# committed with real values.
-secrets: {}
-  # AGENT_LLM_API_KEY: ""
-  # AGENT_QDRANT_API_KEY: ""
+# `config` above. The values below are the placeholders this local stack runs
+# on; real credentials are passed at install time and never committed:
+#
+#   helm upgrade --install agent k8s/agent \
+#     --set-string secrets.AGENT_QDRANT_KEY="$QDRANT_KEY"
+secrets:
+  # Ollama does not authenticate, but the OpenAI client refuses to start
+  # without a key, so the app's own default is carried here explicitly.
+  AGENT_LLM_KEY: not-needed
+  # Empty because Qdrant runs unauthenticated here. app/app/config.py reads an
+  # empty value as "no key" rather than sending a blank api-key header.
+  AGENT_QDRANT_KEY: ""
 
 extraEnv: []
 extraEnvFrom: []

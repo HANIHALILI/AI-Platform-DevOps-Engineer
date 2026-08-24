@@ -1,0 +1,10 @@
+.DS_Store
+.git/
+.gitignore
+.idea/
+.vscode/
+*.tmproj
+*.swp
+*.bak
+# No *.tgz rule here: it would also hide charts/qdrant-*.tgz, and Helm then
+# reports the dependency as missing.

@@ -6,7 +6,10 @@ The Agent service has been deployed as release {{ .Release.Name | quote }} in na
   {{- else }}
   Replicas:  {{ .Values.replicaCount }}
   {{- end }}
-  Service:   {{ include "agent.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+  Service:   {{ include "agent.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }} ({{ .Values.service.type }})
+  {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+  Host:      http://localhost:8080 (node port {{ .Values.service.nodePort }}, mapped in k8s/kind-config.yaml)
+  {{- end }}
 
 1. Watch the rollout:
 

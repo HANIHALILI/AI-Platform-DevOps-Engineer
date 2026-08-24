@@ -1,0 +1,86 @@
+image:
+  repository: ollama/ollama
+  # Empty => Chart.appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Pulled before the server starts accepting traffic. Keep in step with
+# AGENT_LLM_MODEL and AGENT_EMBED_MODEL in app/app/config.py.
+models:
+  - llama3.2:3b
+  - all-minilm
+
+service:
+  type: ClusterIP
+  # Ollama's own port, and the one app/app/config.py defaults to.
+  port: 11434
+
+# Model cache. Without it every restart re-downloads ~2GB.
+persistence:
+  enabled: true
+  size: 20Gi
+  # Empty => the cluster default StorageClass.
+  storageClassName: ""
+
+# llama3.2:3b is ~2GB on disk and ~4GB once loaded.
+resources:
+  requests:
+    cpu: "1"
+    memory: 4Gi
+  limits:
+    cpu: "4"
+    memory: 8Gi
+
+# The image ships no non-root user. HOME is set to the mounted volume in the
+# Deployment, so the models and the registry key Ollama generates land there
+# instead of on the read-only root filesystem.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Loading the model into memory takes longer than liveness tolerates; liveness
+# does not start until this passes.
+startupProbe:
+  httpGet:
+    path: /
+    port: http
+  periodSeconds: 5
+  failureThreshold: 60
+
+# Ollama serves no /health, so /api/tags is the endpoint that proves the API is
+# answering. CPU-only inference saturates the node, so the timing is
+# deliberately slack — a busy server must not be restarted mid-generation.
+livenessProbe:
+  httpGet:
+    path: /api/tags
+    port: http
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+# /api/tags lists the models on disk, so this stays down until they are there.
+readinessProbe:
+  httpGet:
+    path: /api/tags
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+nodeSelector: {}
+tolerations: []
+
+terminationGracePeriodSeconds: 60
