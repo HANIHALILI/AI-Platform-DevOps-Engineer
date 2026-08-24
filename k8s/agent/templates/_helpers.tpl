@@ -19,7 +19,7 @@
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{/* `app` is the label `make smoke` selects on. */}}
+{{/* `app` is the label `scripts/smoke.sh` selects on. */}}
 {{- define "agent.selectorLabels" -}}
 app: {{ include "agent.name" . }}
 app.kubernetes.io/name: {{ include "agent.name" . }}

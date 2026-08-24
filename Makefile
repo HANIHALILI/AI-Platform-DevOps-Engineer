@@ -106,34 +106,8 @@ deploy-agent:
 
 all: up build push deploy
 
-# The registry and the containerd mirror get no checks of their own: if either
-# were broken, the Pods could not pull the image and the rollout would hang here.
 smoke:
-	@fail() { echo "FAILED: $$1" >&2; exit 1; }
-
-	test "$$(kubectl get nodes --no-headers | grep -cw Ready)" = 3 \
-	  || fail "expected 3 Ready nodes"
-	kubectl -n $(NAMESPACE) rollout status deploy/agent --timeout=180s \
-	  || fail "the agent rollout did not complete"
-	test "$$(kubectl -n $(NAMESPACE) get pods -l app=agent \
-	  -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | sort -u | wc -l)" = 2 \
-	  || fail "agent Pods are not spread across both workers"
-
-	kubectl -n $(NAMESPACE) exec deploy/agent -- id | grep -q uid=10001 \
-	  || fail "the container is not running as uid 10001"
-	! kubectl -n $(NAMESPACE) exec deploy/agent -- touch /x 2>/dev/null \
-	  || fail "the root filesystem is writable"
-
-	# printenv proves the ConfigMap and the Secret exist *and* reached the
-	# container, so neither needs a `kubectl get` of its own.
-	test "$$(kubectl -n $(NAMESPACE) exec deploy/agent -- printenv AGENT_QDRANT_URL)" = http://qdrant:6333 \
-	  || fail "AGENT_QDRANT_URL did not reach the container from the ConfigMap"
-	kubectl -n $(NAMESPACE) exec deploy/agent -- printenv AGENT_LLM_KEY >/dev/null \
-	  || fail "AGENT_LLM_KEY did not reach the container from the Secret"
-
-	curl -fsS http://localhost:8080/healthz \
-	  || fail "/healthz did not answer on host :8080, the port kind maps to the NodePort"
-	echo "SMOKE OK"
+	@bash scripts/smoke.sh
 
 down:
 	-kind delete cluster --name $(CLUSTER_NAME)
