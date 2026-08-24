@@ -28,16 +28,12 @@ FROM ${PYTHON_BASE} AS runtime
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONUNBUFFERED=1
 
 RUN groupadd --gid 10001 agentsvc \
  && useradd --uid 10001 --gid 10001 -M -s /usr/sbin/nologin agentsvc
 
 COPY --from=builder --chown=10001:10001 /opt/venv /opt/venv
-
-WORKDIR /app
-COPY --chown=10001:10001 app/app/ ./app/
 
 USER 10001:10001
 

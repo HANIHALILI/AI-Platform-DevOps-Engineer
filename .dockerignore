@@ -7,7 +7,7 @@
 # ships all of it to the Docker daemon.
 **/.venv
 
-.git
+**/.git
 .gitignore
 .gitattributes
 

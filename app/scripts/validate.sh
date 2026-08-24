@@ -45,7 +45,7 @@ ask() {
   echo "=============================================================="
   curl -N -s -X POST "http://127.0.0.1:${APP_PORT}/chat" \
     -H 'Content-Type: application/json' \
-    -d "{\"message\": $(printf '%s' "$2" | python -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}"
+    -d "{\"message\": $(printf '%s' "$2" | uv run python -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}"
 }
 
 ask "plain answer (no tool call)"        "hello there"

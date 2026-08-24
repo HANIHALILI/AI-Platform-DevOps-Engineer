@@ -431,5 +431,3 @@ Nothing here re-tests LangGraph. Routing, tool binding and the ReAct loop are th
 - `create_react_agent` is deprecated in LangGraph v1 in favour of `langchain.agents.create_agent`.
   Kept, because moving would add the full `langchain` package as a new top-level dependency.
 - Criterion 6 (re-index idempotency) needs a live Qdrant and is verified in Part 2, not locally.
-- Criterion 8 (SIGTERM drain) cannot be exercised on Windows, where SIGTERM maps to
-  `TerminateProcess`. It relies on uvicorn's default graceful shutdown in-cluster.
