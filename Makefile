@@ -18,14 +18,15 @@ IMAGE_TAG      ?= dev
 NAMESPACE      ?= ai-platform
 
 .PHONY: help deps registry cluster up build push \
-        deploy deploy-qdrant deploy-ollama deploy-agent all smoke down clean
+        deploy deploy-qdrant deploy-ollama deploy-agent deploy-monitoring all smoke down clean
 
 help:
 	@echo "make deps     check that docker, kind, kubectl and helm are installed"
 	echo "make up       local registry + 3-node cluster"
 	echo "make build    build $(IMAGE):$(IMAGE_TAG)"
 	echo "make push     push it to the local registry"
-	echo "make deploy   install qdrant, then ollama, then the agent"
+	echo "make deploy   install application and monitoring charts"
+	echo "make deploy-monitoring install Prometheus, Grafana, Loki and Promtail"
 	echo "make all      up + build + push + deploy"
 	echo "make smoke    end-to-end checks"
 	echo "make down     delete the cluster"
@@ -85,7 +86,7 @@ build:
 push: build
 	@docker push $(IMAGE):$(IMAGE_TAG)
 
-deploy: deploy-qdrant deploy-ollama deploy-agent
+deploy: deploy-qdrant deploy-ollama deploy-agent deploy-monitoring
 
 deploy-qdrant:
 	@ls k8s/qdrant/charts/*.tgz >/dev/null 2>&1 || helm dependency build k8s/qdrant
@@ -103,6 +104,13 @@ deploy-agent:
 	  --set image.repository=$(IMAGE) --set image.tag=$(IMAGE_TAG) \
 	  --set-string podAnnotations.rolledAt=$$(date +%s)
 	kubectl -n $(NAMESPACE) get pods -o wide
+
+deploy-monitoring:
+	@helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null
+	@helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
+	@helm repo update >/dev/null
+	@helm dependency build k8s/observability
+	helm upgrade --install monitoring k8s/observability -n $(NAMESPACE) --create-namespace
 
 all: up build push deploy
 
