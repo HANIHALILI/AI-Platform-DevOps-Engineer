@@ -57,9 +57,11 @@ config:
   AGENT_LLM_URL: http://ollama:11434/v1
   AGENT_EMBED_URL: http://ollama:11434
   AGENT_QDRANT_URL: http://qdrant:6333
-  # Must stay in step with `models` in k8s/ollama/values.yaml — Ollama only
-  # pulls what is listed there.
-  AGENT_LLM_MODEL: llama3.2:3b
+  # `model.servedAs` in k8s/ollama/values.yaml, not a base model name: Ollama
+  # builds that model from its Modelfile, so the weights and the quantization
+  # behind it change there without this value moving. AGENT_EMBED_MODEL is
+  # `embedModel` in the same file.
+  AGENT_LLM_MODEL: agent-llm
   AGENT_EMBED_MODEL: all-minilm
 
 # Rendered into a Secret (stringData) with the same envFrom treatment as

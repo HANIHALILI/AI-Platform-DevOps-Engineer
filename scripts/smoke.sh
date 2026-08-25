@@ -18,7 +18,7 @@ test "$(kubectl get nodes -l workload=agent --no-headers | grep -cw Ready)" = 2 
 
 kubectl -n "$NS" rollout status deploy/agent --timeout=180s \
   || fail "the agent rollout did not complete"
-kubectl -n "$NS" rollout status deploy/ollama --timeout=180s \
+kubectl -n "$NS" rollout status deploy/ollama --timeout=600s \
   || fail "the Ollama rollout did not complete"
 kubectl -n "$NS" rollout status statefulset/qdrant --timeout=180s \
   || fail "the Qdrant rollout did not complete"
@@ -36,12 +36,11 @@ kubectl -n "$NS" exec deploy/agent -- id | grep -q uid=10001 \
 ! kubectl -n "$NS" exec deploy/agent -- touch /x 2>/dev/null \
   || fail "the root filesystem is writable"
 
-kubectl -n "$NS" get configmap/agent-config secret/agent-secrets >/dev/null \
-  || fail "the agent ConfigMap or Secret is missing"
-value deploy agent '{.spec.template.spec.containers[0].envFrom[*].configMapRef.name}' | grep -qw agent-config \
-  || fail "the ConfigMap is not referenced by the agent"
-value deploy agent '{.spec.template.spec.containers[0].envFrom[*].secretRef.name}' | grep -qw agent-secrets \
-  || fail "the Secret is not referenced by the agent"
+kubectl -n "$NS" exec deploy/agent -- printenv AGENT_QDRANT_URL >/dev/null \
+  || fail "the ConfigMap did not reach the container"
+
+kubectl -n "$NS" exec deploy/agent -- printenv AGENT_LLM_KEY >/dev/null \
+  || fail "the Secret did not reach the container"
 
 test "$(value hpa agent '{.spec.metrics[0].resource.target.averageUtilization}')" = 70 \
   || fail "the agent HPA is not targeting 70% CPU"
@@ -59,8 +58,26 @@ test "$(value deploy ollama '{.spec.template.spec.containers[0].readinessProbe.h
   || fail "the Ollama readiness probe is missing"
 value deploy ollama '{.spec.template.spec.containers[0].resources.limits.cpu}' | grep -q . \
   || fail "the Ollama CPU limit is missing"
-value deploy ollama '{.spec.template.spec.initContainers[0].env[0].value}' | grep -q '^llama3.2:3b-instruct-q4_K_M$' \
-  || fail "the configured Ollama model is missing"
+
+# What the chart asked for: the tag it pulls, and the name it builds from it.
+BASE=$(kubectl -n "$NS" get deploy ollama \
+  -o jsonpath='{.spec.template.spec.initContainers[0].env[?(@.name=="BASE_MODEL")].value}')
+SERVED=$(kubectl -n "$NS" get deploy ollama \
+  -o jsonpath='{.spec.template.spec.initContainers[0].env[?(@.name=="SERVED")].value}')
+
+# An empty BASE would leave the quantization pattern below matching any line that
+# says "quantization", so the assertion has to fail here instead of passing.
+test -n "$BASE" || fail "the ollama Deployment has no BASE_MODEL environment variable"
+
+# `ollama show` proves agent-llm was built, and reports the quantization the
+# weights carry, which has to be the one the tag asked for.
+SHOW=$(kubectl -n "$NS" exec deploy/ollama -- ollama show "$SERVED") \
+  || fail "$SERVED was not built from the Modelfile"
+grep -qi "quantization.*${BASE##*-}" <<<"$SHOW" \
+  || fail "$SERVED does not report the quantization $BASE asked for"
+
+kubectl -n "$NS" exec deploy/agent -- printenv AGENT_LLM_MODEL | grep -qx "$SERVED" \
+  || fail "the agent asks for a model ollama does not serve"
 
 curl -fsS http://localhost:8080/healthz >/dev/null \
   || fail "/healthz did not answer on host :8080, the port kind maps to the NodePort"

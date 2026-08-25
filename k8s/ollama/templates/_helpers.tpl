@@ -38,3 +38,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end }}
+
+{{- define "ollama.baseModel" -}}
+{{- printf "%s:%s-%s" .Values.model.repository .Values.model.variant .Values.model.quantization -}}
+{{- end }}

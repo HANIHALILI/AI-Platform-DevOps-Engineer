@@ -7,29 +7,63 @@ image:
 nameOverride: ""
 fullnameOverride: ""
 
-# Pulled before the server starts accepting traffic. Keep in step with
-# AGENT_LLM_MODEL and AGENT_EMBED_MODEL in app/app/config.py.
-models:
-  - llama3.2:3b
-  - all-minilm
+# The served model. `repository:variant-quantization` is the tag pulled from
+# ollama.com; `servedAs` is what the init container builds from the Modelfile
+# and what the agent asks for. Switching model or quantization is an edit here
+# and nowhere else, because `servedAs` does not change with it.
+model:
+  repository: llama3.2
+  variant: 3b-instruct
+  quantization: q4_K_M
+  servedAs: agent-llm
 
-# Ollama defaults to 2048, which the system prompt plus a search_docs result
-# overflows — and it drops the oldest messages silently when it does.
-contextLength: 8192
+# Embeddings, pulled as-is. all-minilm ships one 45MB build, so no quantization
+# to choose.
+embedModel: all-minilm
+
+# Written into the Modelfile as PARAMETER lines, so they become the defaults of
+# the served model and apply to any caller that does not override them.
+inference:
+  # Ollama defaults to 2048, which the system prompt plus a search_docs result
+  # overflows — and it drops the oldest messages silently when it does.
+  contextLength: 8192
+  numPredict: 512
+  topK: 40
+  topP: 0.9
+  # Threads llama.cpp runs. Left at 0 Ollama sizes this from the cores it can
+  # see on the node, not from the cgroup, so a Pod limited to 4 CPUs on a bigger
+  # node oversubscribes and gets throttled — which shows up as noise in a
+  # benchmark. Keep it equal to resources.limits.cpu.
+  numThread: 4
+
+# Process-wide limits, passed as environment variables. Unlike the block above
+# these bound the server across all models and requests.
+server:
+  # Requests decoded concurrently per model. Each holds its own context window,
+  # so memory scales with this.
+  numParallel: 1
+  # The LLM and the embedding model, both resident.
+  maxLoadedModels: 2
+  # How long an idle model stays loaded. Short values give the memory back and
+  # pay the load again on the next request.
+  keepAlive: 24h
 
 service:
   type: ClusterIP
   # Ollama's own port, and the one app/app/config.py defaults to.
   port: 11434
 
-# Model cache. Without it every restart re-downloads ~2GB.
+# Model cache. Without it every restart re-downloads the weights.
 persistence:
   enabled: true
   size: 20Gi
   # Empty => the cluster default StorageClass.
   storageClassName: ""
 
-# llama3.2:3b is ~2GB on disk and ~4GB once loaded.
+# CPU-only, which is the whole hardware story here: the Modelfile pins
+# `num_gpu 0` and nothing requests nvidia.com/gpu. q4_K_M weights are 1.9GB on
+# disk and want roughly twice that resident once the context is allocated. Keep
+# limits.cpu and inference.numThread equal.
 resources:
   requests:
     cpu: "1"

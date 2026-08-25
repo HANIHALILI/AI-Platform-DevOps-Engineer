@@ -17,6 +17,10 @@ spec:
     metadata:
       labels:
         {{- include "ollama.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Rebuilds the served model when the Modelfile changes; without it a
+        # `helm upgrade` that only retunes inference leaves the Pod as it was.
+        checksum/modelfile: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
@@ -30,7 +34,6 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.models }}
       # Pulling here rather than after startup means a Ready Pod is one that can
       # answer. `ollama pull` talks to the HTTP API, hence the throwaway server.
       initContainers:
@@ -46,12 +49,19 @@ spec:
                 if ollama list >/dev/null 2>&1; then break; fi
                 sleep 1
               done
-              for model in $MODELS; do
-                ollama pull "$model"
+              # `show` is the cheap existence check: on a restart the weights are
+              # already on the volume and nothing touches the network.
+              for model in "$BASE_MODEL" "$EMBED_MODEL"; do
+                ollama show "$model" >/dev/null 2>&1 || ollama pull "$model"
               done
+              ollama create "$SERVED" -f /modelfile/Modelfile
           env:
-            - name: MODELS
-              value: {{ .Values.models | join " " | quote }}
+            - name: BASE_MODEL
+              value: {{ include "ollama.baseModel" . | quote }}
+            - name: EMBED_MODEL
+              value: {{ .Values.embedModel | quote }}
+            - name: SERVED
+              value: {{ .Values.model.servedAs | quote }}
             - name: HOME
               value: /models
           securityContext:
@@ -61,9 +71,10 @@ spec:
           volumeMounts:
             - name: models
               mountPath: /models
+            - name: modelfile
+              mountPath: /modelfile
             - name: tmp
               mountPath: /tmp
-      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "ollama.image" . | quote }}
@@ -75,8 +86,16 @@ spec:
           env:
             - name: HOME
               value: /models
+            # The server-side default for callers that send no num_ctx of their
+            # own; the Modelfile carries the same number for the served model.
             - name: OLLAMA_CONTEXT_LENGTH
-              value: {{ .Values.contextLength | quote }}
+              value: {{ .Values.inference.contextLength | quote }}
+            - name: OLLAMA_NUM_PARALLEL
+              value: {{ .Values.server.numParallel | quote }}
+            - name: OLLAMA_MAX_LOADED_MODELS
+              value: {{ .Values.server.maxLoadedModels | quote }}
+            - name: OLLAMA_KEEP_ALIVE
+              value: {{ .Values.server.keepAlive | quote }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           resources:
@@ -100,5 +119,8 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        - name: modelfile
+          configMap:
+            name: {{ include "ollama.fullname" . }}-modelfile
         - name: tmp
           emptyDir: {}

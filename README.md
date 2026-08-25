@@ -6,7 +6,7 @@ inference server and Qdrant as the vector store, one Helm chart each under `k8s/
 
 `app/SPEC.md` describes the service; `app/app/config.py` lists every setting it reads.
 `k8s/ollama/README.md` covers the inference tier — the quantized model it serves, what is tunable,
-and how to measure it.
+and how to measure it. `k8s/argocd/README.md` covers the GitOps flow.
 
 ## Without a cluster
 
@@ -28,15 +28,20 @@ have to be on your PATH — `make deps` checks for all four and names whatever i
 
 ```sh
 make up      # local registry, 3-node cluster, metrics-server
-make all     # the same, plus the image, application and observability charts
+make all     # the same, plus the image release and Argo CD
 ```
 
-`make deploy` installs Qdrant, Ollama, the agent and monitoring. The application order matters.
-The agent's `/readyz` returns 503 while the LLM is unreachable, so its rollout will not
-finish until Ollama is Ready — and Ollama's first start downloads ~2GB of models in an init
-container, then builds the model the agent calls from a Modelfile, before it serves anything
+`make deploy` installs Qdrant, Ollama, the agent and monitoring with Helm, bypassing Argo CD. The
+application order matters. The agent's `/readyz` returns 503 while the LLM is unreachable, so its
+rollout will not finish until Ollama is Ready — and Ollama's first start downloads ~2GB of models in
+an init container, then builds the model the agent calls from a Modelfile, before it serves anything
 (`kubectl logs -f -l app=ollama -c pull-models`). The models sit on a PVC, so later restarts skip
 the download.
+
+`make gitops` installs Argo CD and gives each of the four charts an Application that watches `main`,
+syncs, prunes and self-heals — so a chart edited by hand, or a `make deploy-agent` from the inner
+loop, is pulled back on the next sync. A new image is not a chart change and needs a commit of its
+own: that is `make release`.
 
 For the inner loop, each piece has its own target:
 

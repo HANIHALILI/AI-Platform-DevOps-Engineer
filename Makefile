@@ -6,6 +6,8 @@ SHELL := /bin/bash
 CLUSTER_NAME   ?= ai-platform-cluster
 KIND_CONFIG    ?= k8s/kind-config.yaml
 METRICS_SERVER_VERSION ?= v0.7.2
+ARGOCD_VERSION         ?= v3.4.6
+GITOPS_BRANCH          ?= main
 
 # One container under two names: localhost:5001 from the host, kind-registry:5000
 # from the nodes.
@@ -14,21 +16,25 @@ REGISTRY_PORT  ?= 5001
 REGISTRY_IMAGE ?= registry:3
 
 IMAGE          ?= localhost:$(REGISTRY_PORT)/agent
-IMAGE_TAG      ?= dev
+# The image is built from app/, so the commit that last touched it names it.
+IMAGE_TAG      ?= $(shell git log -1 --format=%h -- app)
 NAMESPACE      ?= ai-platform
 
 .PHONY: help deps registry cluster up build push \
-        deploy deploy-qdrant deploy-ollama deploy-agent deploy-monitoring all smoke down clean
+        deploy deploy-qdrant deploy-ollama deploy-agent deploy-monitoring \
+        install-argocd gitops release all smoke bench down clean
 
 help:
 	@echo "make deps     check that docker, kind, kubectl and helm are installed"
 	echo "make up       local registry + 3-node cluster"
 	echo "make build    build $(IMAGE):$(IMAGE_TAG)"
 	echo "make push     push it to the local registry"
-	echo "make deploy   install application and monitoring charts"
-	echo "make deploy-monitoring install Prometheus, Grafana, Loki and Promtail"
-	echo "make all      up + build + push + deploy"
+	echo "make deploy   install the application and monitoring charts, bypassing Argo CD"
+	echo "make gitops   install Argo CD and enable automatic chart sync"
+	echo "make release  push the image and record its tag in git for Argo CD"
+	echo "make all      up + release + gitops"
 	echo "make smoke    end-to-end checks"
+	echo "make bench    measure the inference tier"
 	echo "make down     delete the cluster"
 	echo "make clean    delete the cluster and the registry"
 
@@ -97,8 +103,8 @@ deploy-qdrant:
 deploy-ollama:
 	@helm upgrade --install ollama k8s/ollama -n $(NAMESPACE) --create-namespace
 
-# `dev` is a moving tag, so nothing in the release changes between builds and
-# helm would report "no changes". The timestamp is what rolls the Pods.
+# Bypasses Argo CD, for the inner loop. The tag only moves when app/ is
+# committed, so the timestamp is what rolls the Pods in between.
 deploy-agent:
 	@helm upgrade --install agent k8s/agent -n $(NAMESPACE) --create-namespace \
 	  --set image.repository=$(IMAGE) --set image.tag=$(IMAGE_TAG) \
@@ -106,16 +112,39 @@ deploy-agent:
 	kubectl -n $(NAMESPACE) get pods -o wide
 
 deploy-monitoring:
-	@helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null
-	@helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
-	@helm repo update >/dev/null
-	@helm dependency build k8s/observability
+	@ls k8s/observability/charts/*.tgz >/dev/null 2>&1 || helm dependency build k8s/observability
 	helm upgrade --install monitoring k8s/observability -n $(NAMESPACE) --create-namespace
 
-all: up build push deploy
+install-argocd:
+	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+	# --server-side: the applicationsets CRD is too big for the apply annotation.
+	kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/$(ARGOCD_VERSION)/manifests/install.yaml
+	kubectl -n argocd wait --for=condition=Available deployment --all --timeout=180s
+
+gitops: install-argocd
+	kubectl apply -f k8s/argocd/applications.yaml
+
+# A release always comes from $(GITOPS_BRANCH), whatever is checked out here:
+# the image is built in a throwaway worktree of it, and the tag that Argo CD
+# reads is committed onto it.
+release:
+	git fetch -q origin $(GITOPS_BRANCH)
+	work=$$(mktemp -d)
+	git worktree add -q --detach "$$work" origin/$(GITOPS_BRANCH)
+	trap 'git worktree remove --force "$$work"' EXIT
+	tag=$$(git -C "$$work" log -1 --format=%h -- app)
+	$(MAKE) -C "$$work" push IMAGE_TAG="$$tag"
+	sed -i "s|^  tag: .*|  tag: $$tag|" "$$work/k8s/agent/values.yaml"
+	git -C "$$work" diff --quiet || git -C "$$work" commit -aqm "release: agent $$tag"
+	git -C "$$work" push origin HEAD:$(GITOPS_BRANCH)
+
+all: up release gitops
 
 smoke:
 	@NAMESPACE=$(NAMESPACE) bash scripts/smoke.sh
+
+bench:
+	@NAMESPACE=$(NAMESPACE) bash scripts/bench.sh
 
 down:
 	-kind delete cluster --name $(CLUSTER_NAME)
