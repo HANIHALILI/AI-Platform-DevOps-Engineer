@@ -33,7 +33,9 @@ environment and does not represent GPU offload.
 
 | Change | Model | Before warm mean tok/s | After warm mean tok/s | Before aggregate tok/s | After aggregate tok/s | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |  |
+| `OLLAMA_NUM_PARALLEL`: 1 → 2 | `qwen3:4b-q4_K_M` | 9.10 | 9.31 | 5.98 | 12.59 | RSS rose 4116Mi → 5272Mi; aggregate throughput rose 110%, still below the 8Gi limit. |
+| memory request/limit: 4Gi/8Gi → 20Gi/24Gi | `qwen3:4b-q4_K_M`; `numParallel=2` | 9.31 | 9.21 | 12.59 | 12.49 | No material throughput benefit: higher limit creates safe headroom for additional slots rather than accelerating two slots. |
+| `OLLAMA_NUM_PARALLEL`: 2 → 3 | `qwen3:4b-q4_K_M`; 20Gi/24Gi memory | 9.21 | 9.26 | 12.49 | 14.34 | RSS rose 5267Mi → 6415Mi; third slot improved aggregate throughput 14.8%. |
 
 ## Final conclusion
 
