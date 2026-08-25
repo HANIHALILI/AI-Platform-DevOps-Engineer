@@ -65,30 +65,29 @@ generate() {
 # the first chunk that carries generated text, so it includes the client, the
 # port-forward and the network.
 stream() {
-  local began
+  local began first summary chunk
   began=${EPOCHREALTIME/[.,]/}
-  curl -sS --no-buffer --max-time 900 "$API/api/generate" \
+  first= summary=
+  # Process substitution keeps the reader, its first-token clock and the
+  # arithmetic in this shell. A pipeline runs the loop in a subshell on Bash,
+  # which made Qwen3's thinking chunks incorrectly produce a zero TTFT.
+  while IFS= read -r chunk; do
+    # Qwen3 can stream reasoning in "thinking" before it streams an answer in
+    # "response". Both are generated text. The empty response-only chunks and
+    # the final summary must not stop the clock.
+    case $chunk in
+      *'"thinking":"'*|*'"response":"'*) [ -n "$first" ] || first=${EPOCHREALTIME/[.,]/} ;;
+      *'"thinking":""'|*'"response":""'*) ;;
+    esac
+    case $chunk in *'"done":true'*) summary=$chunk ;; esac
+  done < <(curl -sS --no-buffer --max-time 900 "$API/api/generate" \
     -H 'Content-Type: application/json' \
-    -d "{\"model\":\"$MODEL\",\"prompt\":\"$PROMPT\",\"stream\":true,\"options\":$OPTIONS}" \
-  | {
-      first= summary=
-      while IFS= read -r chunk; do
-        # Qwen3 can stream reasoning in "thinking" before it streams an answer
-        # in "response". Both are user-visible generated text, so either is a
-        # valid first token. The trailing summary carries an empty response.
-        case $chunk in
-          *'"thinking":""'|*'"response":""'*) ;;
-          *'"thinking":"'*|*'"response":"'*) [ -n "$first" ] || first=${EPOCHREALTIME/[.,]/} ;;
-        esac
-        case $chunk in *'"done":true'*) summary=$chunk ;; esac
-      done
-      # EPOCHREALTIME is a builtin, and dropping the separator leaves whole
-      # microseconds — so taking a timestamp costs no fork, and the arithmetic
-      # can wait until the stream is over. A `date` call here would put its own
-      # process spawn inside the interval being measured.
-      echo "$(( first ? (first - began) * 1000 : 0 ))"
-      echo "$summary"
-    }
+    -d "{\"model\":\"$MODEL\",\"prompt\":\"$PROMPT\",\"stream\":true,\"options\":$OPTIONS}")
+  # EPOCHREALTIME is a builtin, and dropping the separator leaves whole
+  # microseconds — so taking a timestamp costs no fork, and the arithmetic can
+  # wait until the stream is over.
+  echo "$(( first ? (first - began) * 1000 : 0 ))"
+  echo "$summary"
 }
 
 # Empty, not a failure, when the field is absent: a request that timed out or
