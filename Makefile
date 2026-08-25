@@ -18,7 +18,8 @@ IMAGE_TAG      ?= dev
 NAMESPACE      ?= ai-platform
 
 .PHONY: help deps registry cluster up build push \
-        deploy deploy-qdrant deploy-ollama deploy-agent all smoke bench down clean
+	deploy deploy-qdrant deploy-ollama deploy-agent install-argocd gitops all \
+	smoke bench down clean
 
 help:
 	@echo "make deps     check that docker, kind, kubectl and helm are installed"
@@ -26,6 +27,7 @@ help:
 	echo "make build    build $(IMAGE):$(IMAGE_TAG)"
 	echo "make push     push it to the local registry"
 	echo "make deploy   install qdrant, then ollama, then the agent"
+	echo "make gitops    install Argo CD and enable automatic chart sync"
 	echo "make all      up + build + push + deploy"
 	echo "make smoke    end-to-end checks"
 	echo "make bench    measure the inference tier"
@@ -104,6 +106,14 @@ deploy-agent:
 	  --set image.repository=$(IMAGE) --set image.tag=$(IMAGE_TAG) \
 	  --set-string podAnnotations.rolledAt=$$(date +%s)
 	kubectl -n $(NAMESPACE) get pods -o wide
+
+install-argocd:
+	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+	kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+	kubectl -n argocd wait --for=condition=Available deployment --all --timeout=180s
+
+gitops: install-argocd
+	kubectl apply -f k8s/argocd/applications.yaml
 
 all: up build push deploy
 
