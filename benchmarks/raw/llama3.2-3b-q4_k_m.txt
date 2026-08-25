@@ -1,0 +1,41 @@
+== configuration
+pod                  ollama-7974587f89-9466m
+served model         agent-llm
+base model           llama3.2:3b-instruct-q4_K_M   (quantization q4_K_M)
+options              {"num_predict":256,"temperature":0,"seed":42}
+runs / parallel      3 / 4
+OLLAMA_CONTEXT_LENGTH=8192
+OLLAMA_NUM_PARALLEL=1
+OLLAMA_MAX_LOADED_MODELS=2
+OLLAMA_KEEP_ALIVE=24h
+limits: {"cpu":"4","memory":"8Gi"}
+
+== startup
+init container       12 s   (pull + ollama create)
+scheduled to Ready   106 s   (init, then the server and its probes)
+
+== cold start (model unloaded first)
+TTFT                 3.62 s   (client-observed: send -> first streamed token)
+  model load         3.07 s   (Ollama-reported: weights off the PVC)
+  prompt eval        0.54 s   (Ollama-reported: prompt prefill)
+
+== resident memory
+Defaulted container "ollama" out of: ollama, pull-models (init)
+NAME                ID              SIZE      PROCESSOR          CONTEXT    UNTIL
+agent-llm:latest    b7314c881323    3.5 GB    41%/59% CPU/GPU    8192       24 hours from now
+container RSS        3317MiB  (the whole process, every model it holds)
+
+== warm requests (3 runs, one at a time)
+run 1 TTFT           0.10 s
+run 2 TTFT           0.10 s
+run 3 TTFT           0.10 s
+run 1 generation     11.36 tok/s
+run 2 generation     11.45 tok/s
+run 3 generation     11.34 tok/s
+mean generation      11.38 tok/s
+
+== aggregate
+requests             4
+tokens               796 tok
+wall                 70.52 s
+throughput           11.29 tok/s

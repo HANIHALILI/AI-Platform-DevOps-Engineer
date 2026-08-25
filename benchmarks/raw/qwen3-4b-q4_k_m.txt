@@ -1,0 +1,37 @@
+== configuration
+pod                  ollama-545cb7df9d-9zrvg
+served model         agent-llm
+base model           qwen3:4b-q4_K_M   (quantization q4_K_M)
+options              {"num_predict":256,"temperature":0,"seed":42}
+runs / parallel      3 / 4
+OLLAMA_CONTEXT_LENGTH=8192
+OLLAMA_NUM_PARALLEL=1
+OLLAMA_MAX_LOADED_MODELS=2
+OLLAMA_KEEP_ALIVE=24h
+limits: {"cpu":"4","memory":"8Gi"}
+
+== startup
+init container       11 s   (pull + ollama create)
+scheduled to Ready   21 s   (init, then the server and its probes)
+
+== cold start (model unloaded first)
+TTFT                 0.00 s   (invalid: parser did not recognize Qwen3 thinking chunks)
+  model load         3.32 s   (Ollama-reported: weights off the PVC)
+  prompt eval        0.62 s   (Ollama-reported: prompt prefill)
+
+== resident memory
+NAME                ID              SIZE      PROCESSOR          CONTEXT    UNTIL
+agent-llm:latest    6cf1cb337da4    4.4 GB    39%/61% CPU/GPU    8192       24 hours from now
+container RSS        4116Mi   (the whole process, every model it holds)
+
+Note: Ollama startup/runner logs verified no usable GPU and CPU library; the
+PROCESSOR split above is not an actual GPU offload measurement in this cluster.
+
+== warm requests (3 runs, one at a time)
+run 1               TTFT 0.00 s (invalid)   256 tok   9.09 tok/s
+run 2               TTFT 0.00 s (invalid)   256 tok   9.09 tok/s
+run 3               TTFT 0.00 s (invalid)   256 tok   9.12 tok/s
+mean                 9.10 tok/s
+
+== aggregate throughput (4 at once)
+4 requests           1024 tok  171.35 s wall  5.98 tok/s aggregate

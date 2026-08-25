@@ -73,11 +73,12 @@ stream() {
   | {
       first= summary=
       while IFS= read -r chunk; do
-        # The trailing summary carries "response" too, but empty. The first
-        # chunk with text in it is the one the clock is waiting for.
+        # Qwen3 can stream reasoning in "thinking" before it streams an answer
+        # in "response". Both are user-visible generated text, so either is a
+        # valid first token. The trailing summary carries an empty response.
         case $chunk in
-          *'"response":""'*) ;;
-          *'"response":"'*) [ -n "$first" ] || first=${EPOCHREALTIME/[.,]/} ;;
+          *'"thinking":""'|*'"response":""'*) ;;
+          *'"thinking":"'*|*'"response":"'*) [ -n "$first" ] || first=${EPOCHREALTIME/[.,]/} ;;
         esac
         case $chunk in *'"done":true'*) summary=$chunk ;; esac
       done

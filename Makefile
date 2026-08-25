@@ -7,7 +7,9 @@ CLUSTER_NAME   ?= ai-platform-cluster
 KIND_CONFIG    ?= k8s/kind-config.yaml
 METRICS_SERVER_VERSION ?= v0.7.2
 ARGOCD_VERSION         ?= v3.4.6
-GITOPS_BRANCH          ?= main
+# Argo CD follows the branch checked out when `make gitops` runs. Fall back to
+# main for detached HEADs, while still allowing an explicit override.
+GITOPS_BRANCH          ?= $(shell git symbolic-ref --quiet --short HEAD 2>/dev/null || printf '%s' main)
 
 # One container under two names: localhost:5001 from the host, kind-registry:5000
 # from the nodes.
@@ -122,7 +124,7 @@ install-argocd:
 	kubectl -n argocd wait --for=condition=Available deployment --all --timeout=180s
 
 gitops: install-argocd
-	kubectl apply -f k8s/argocd/applications.yaml
+	sed 's|targetRevision: main|targetRevision: $(GITOPS_BRANCH)|g' k8s/argocd/applications.yaml | kubectl apply -f -
 
 # A release always comes from $(GITOPS_BRANCH), whatever is checked out here:
 # the image is built in a throwaway worktree of it, and the tag that Argo CD
