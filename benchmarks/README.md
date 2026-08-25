@@ -35,6 +35,20 @@ existing benchmark script. Save the command's complete stdout verbatim in
 `raw/` using a descriptive model-and-quantization filename, then enter only
 the measured summary values in `results.md`.
 
+## Quality checks
+
+```sh
+make quality
+```
+
+The deterministic cases in `quality/cases.tsv` cover Kubernetes probes, RAG
+grounding, context limits, quantization and concurrency. Each case declares its
+required concepts; the script stores full answers under `quality/raw/` for human
+review and fails when a required concept is absent. Run the same suite after
+every quantization change and record the score beside the performance result.
+For a quantization already present on the Ollama PVC, compare without changing
+the deployment with `MODEL_OVERRIDE=qwen3:4b-q4_K_M make quality`.
+
 ## Organization
 
 - `raw/` contains unedited stdout from individual benchmark runs.

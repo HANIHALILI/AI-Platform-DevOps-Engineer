@@ -32,3 +32,17 @@ cold TTFT, but improves aggregate throughput by 27.8%. It also keeps more
 weight precision, which is the expected direction for text-generation quality.
 Use `q4_K_M` instead when RAM density or cold-start latency matters more than
 throughput and precision.
+
+## Quality gate
+
+The same deterministic five-case rubric was run against both quantizations.
+It covers Kubernetes probes, RAG grounding, context limits, quantization and
+parallel-request trade-offs. Both profiles scored 5/5; full answers are saved
+in [`quality/raw/`](quality/raw/) for human review. This gate establishes that
+the selected profile retains the required concepts, rather than claiming a
+general-purpose quality ranking from five prompts alone.
+
+| Profile | Quality score | Result |
+| --- | ---: | --- |
+| Qwen3 4B `q4_K_M` | 5/5 | Passed every required concept |
+| Qwen3 4B `q8_0` | 5/5 | Passed every required concept; selected on performance |
