@@ -7,6 +7,7 @@ CLUSTER_NAME   ?= ai-platform-cluster
 KIND_CONFIG    ?= k8s/kind-config.yaml
 METRICS_SERVER_VERSION ?= v0.7.2
 ARGOCD_VERSION         ?= v3.4.6
+GITOPS_BRANCH          ?= main
 
 # One container under two names: localhost:5001 from the host, kind-registry:5000
 # from the nodes.
@@ -16,7 +17,7 @@ REGISTRY_IMAGE ?= registry:3
 
 IMAGE          ?= localhost:$(REGISTRY_PORT)/agent
 # The image is built from app/, so the commit that last touched it names the
-# image and re-releasing an unchanged app is a no-op.
+# image. This one names the checkout; release uses $(GITOPS_BRANCH)'s.
 IMAGE_TAG      ?= $(shell git log -1 --format=%h -- app)
 NAMESPACE      ?= ai-platform
 
@@ -113,20 +114,29 @@ deploy-agent:
 
 install-argocd:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-	kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/$(ARGOCD_VERSION)/manifests/install.yaml
+	# The applicationsets CRD is larger than the annotation that client-side
+	# apply writes back into the object.
+	kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/$(ARGOCD_VERSION)/manifests/install.yaml
 	kubectl -n argocd wait --for=condition=Available deployment --all --timeout=180s
 
 gitops: install-argocd
 	kubectl apply -f k8s/argocd/applications.yaml
 
-# The deployment path. The image tag is the commit the app was built from,
-# and the commit that writes it into values.yaml is what Argo CD syncs.
-release: push
-	@git diff --quiet HEAD || { echo "commit your changes first" >&2; exit 1; }
-	sed -i 's|^  tag: .*|  tag: $(IMAGE_TAG)|' k8s/agent/values.yaml
-	git diff --quiet k8s/agent/values.yaml || \
-	  git commit -q k8s/agent/values.yaml -m "release: agent $(IMAGE_TAG)"
-	git push origin HEAD
+# A release always comes from $(GITOPS_BRANCH), whatever is checked out here:
+# the image is built in a throwaway worktree of it, and the tag that Argo CD
+# reads is committed onto it.
+release:
+	@git fetch -q origin $(GITOPS_BRANCH)
+	work=$$(mktemp -d)
+	git worktree add -q --detach "$$work" origin/$(GITOPS_BRANCH)
+	trap 'git worktree remove --force "$$work"' EXIT
+	tag=$$(git -C "$$work" log -1 --format=%h -- app)
+	$(MAKE) -C "$$work" push IMAGE_TAG="$$tag"
+	sed -i "s|^  tag: .*|  tag: $$tag|" "$$work/k8s/agent/values.yaml"
+	git -C "$$work" diff --quiet k8s/agent/values.yaml || {
+	  git -C "$$work" commit -q k8s/agent/values.yaml -m "release: agent $$tag"
+	  git -C "$$work" push origin HEAD:$(GITOPS_BRANCH)
+	}
 
 all: up release gitops
 

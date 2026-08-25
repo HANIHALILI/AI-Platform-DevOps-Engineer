@@ -21,23 +21,28 @@ git push origin main
 
 ## Releasing the Agent
 
-`IMAGE_TAG` is `git log -1 --format=%h -- app`: the commit that last changed the
-image's only input, `app/`. Argo CD redeploys the Agent when that tag changes in
-`k8s/agent/values.yaml`, and `make release` is what changes it:
+The image tag is `git log -1 --format=%h -- app`: the commit that last changed
+the image's only input, `app/`. Argo CD redeploys the Agent when that tag changes
+in `k8s/agent/values.yaml`, and `make release` is what changes it:
 
 ```sh
 make release
 ```
 
-It builds and pushes the image, writes the tag into `values.yaml`, and commits
-and pushes that one file. Argo CD picks up the commit and rolls the Deployment
-onto the new image; `git revert` on the release commit rolls it back. Releasing
-again without touching `app/` leaves the tag where it is and makes no commit.
+It ignores the checkout entirely. It fetches `GITOPS_BRANCH` — `main` by default,
+the branch the applications track — adds a detached worktree of it under `/tmp`,
+builds and pushes the image from there, writes the tag into that worktree's
+`values.yaml`, and commits and pushes the one file back onto the branch. The
+worktree is removed on the way out. Running it from a feature branch releases
+`main`, not the branch: the release is always what Argo CD is about to sync.
+
+Argo CD picks up the commit and rolls the Deployment onto the new image; `git
+revert` on the release commit rolls it back. A release that finds `app/`
+unchanged pushes the same image and makes no commit.
 
 `make all` is `up release gitops`, in that order: the image and its tag reach
 GitHub before Argo CD starts syncing, so the Agent comes up on the right image
-the first time. It pushes to the remote, and it refuses to run with uncommitted
-changes. Run it on `main`, the branch the applications track.
+the first time.
 
 `make deploy` still installs the three charts with Helm directly, for the inner
 loop. It bypasses Argo CD, which pulls the Deployment back to the released tag
