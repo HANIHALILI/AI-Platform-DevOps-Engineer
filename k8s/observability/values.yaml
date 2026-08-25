@@ -1,0 +1,50 @@
+kube-prometheus-stack:
+  grafana:
+    adminPassword: admin
+    additionalDataSources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://monitoring-loki-gateway
+
+# Single-binary Loki writing to local disk. The chart defaults to s3 with a
+# replication factor of 3, and to memcached caches that ask for several GB.
+loki:
+  deploymentMode: SingleBinary
+  loki:
+    auth_enabled: false
+    commonConfig:
+      replication_factor: 1
+    storage:
+      type: filesystem
+    schemaConfig:
+      configs:
+        - from: "2024-04-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: loki_index_
+            period: 24h
+  singleBinary:
+    replicas: 1
+  read:
+    replicas: 0
+  write:
+    replicas: 0
+  backend:
+    replicas: 0
+  chunksCache:
+    enabled: false
+  resultsCache:
+    enabled: false
+  lokiCanary:
+    enabled: false
+  test:
+    enabled: false
+
+# Promtail reads stdout/stderr from every node and adds Kubernetes labels.
+promtail:
+  config:
+    clients:
+      - url: http://monitoring-loki-gateway/loki/api/v1/push

@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: agent
+  # Prometheus selects the ServiceMonitors that carry its own release label.
+  labels:
+    release: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent
+      app.kubernetes.io/instance: agent
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

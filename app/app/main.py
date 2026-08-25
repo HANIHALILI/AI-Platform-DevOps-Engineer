@@ -16,6 +16,7 @@ from app.observability import (
     chat_requests_total,
     chat_ttft_seconds,
     event,
+    request_id,
     request_id_middleware,
     setup_logging,
 )
@@ -51,7 +52,10 @@ async def index():
 
 @app.post("/chat")
 async def chat(body: ChatRequest, request: Request):
+    rid = request_id.get()
+
     async def stream():
+        request_id.set(rid)
         event("request_start", message_length=len(body.message))
         started = time.perf_counter()
         ttft = None

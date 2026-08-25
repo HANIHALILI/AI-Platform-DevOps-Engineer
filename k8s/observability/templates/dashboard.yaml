@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-observability-dashboard
+  labels:
+    grafana_dashboard: "1"
+data:
+  agent-observability.json: |
+    {
+      "annotations":{"list":[]},
+      "editable":true,
+      "panels":[
+        {"type":"timeseries","title":"Agent HTTP request rate","targets":[{"expr":"sum(rate(chat_requests_total[5m]))","legendFormat":"requests/s"}],"gridPos":{"h":8,"w":12,"x":0,"y":0}},
+        {"type":"timeseries","title":"Streaming latency (p95)","targets":[{"expr":"histogram_quantile(0.95, sum(rate(chat_ttft_seconds_bucket[5m])) by (le))","legendFormat":"TTFT"},{"expr":"histogram_quantile(0.95, sum(rate(chat_duration_seconds_bucket[5m])) by (le))","legendFormat":"full response"}],"gridPos":{"h":8,"w":12,"x":12,"y":0}},
+        {"type":"timeseries","title":"Pod CPU usage","targets":[{"expr":"sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"{{ .Release.Namespace }}\",container!=\"\",image!=\"\"}[5m]))","legendFormat":"{{ "{{pod}}" }}"}],"gridPos":{"h":8,"w":12,"x":0,"y":8}},
+        {"type":"timeseries","title":"Pod memory working set","targets":[{"expr":"sum by (pod) (container_memory_working_set_bytes{namespace=\"{{ .Release.Namespace }}\",container!=\"\",image!=\"\"})","legendFormat":"{{ "{{pod}}" }}"}],"gridPos":{"h":8,"w":12,"x":12,"y":8}},
+        {"type":"timeseries","title":"Qdrant search latency (p95)","targets":[{"expr":"histogram_quantile(0.95, sum(rate(qdrant_search_seconds_bucket{status=\"ok\"}[5m])) by (le))","legendFormat":"Qdrant"}],"gridPos":{"h":8,"w":24,"x":0,"y":16}}
+      ],
+      "schemaVersion":39,
+      "tags":["agent","streaming","performance"],
+      "time":{"from":"now-1h","to":"now"},
+      "title":"Agent observability",
+      "uid":"agent-observability"
+    }
