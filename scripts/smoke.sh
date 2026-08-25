@@ -24,6 +24,29 @@ kubectl -n "$NS" exec deploy/agent -- id | grep -q uid=10001 \
 ! kubectl -n "$NS" exec deploy/agent -- touch /x 2>/dev/null \
   || fail "the root filesystem is writable"
 
+kubectl -n "$NS" rollout status deploy/ollama --timeout=600s \
+  || fail "the ollama rollout did not complete"
+
+# What the chart asked for: the tag it pulls, and the name it builds from it.
+BASE=$(kubectl -n "$NS" get deploy ollama \
+  -o jsonpath='{.spec.template.spec.initContainers[0].env[?(@.name=="BASE_MODEL")].value}')
+SERVED=$(kubectl -n "$NS" get deploy ollama \
+  -o jsonpath='{.spec.template.spec.initContainers[0].env[?(@.name=="SERVED")].value}')
+
+# An empty BASE would leave the quantization pattern below matching any line that
+# says "quantization", so the assertion has to fail here instead of passing.
+test -n "$BASE" || fail "the ollama Deployment has no BASE_MODEL environment variable"
+
+# `ollama show` proves agent-llm was built, and reports the quantization the
+# weights carry, which has to be the one the tag asked for.
+SHOW=$(kubectl -n "$NS" exec deploy/ollama -- ollama show "$SERVED") \
+  || fail "$SERVED was not built from the Modelfile"
+grep -qi "quantization.*${BASE##*-}" <<<"$SHOW" \
+  || fail "$SERVED does not report the quantization $BASE asked for"
+
+kubectl -n "$NS" exec deploy/agent -- printenv AGENT_LLM_MODEL | grep -qx "$SERVED" \
+  || fail "the agent asks for a model ollama does not serve"
+
 kubectl -n "$NS" exec deploy/agent -- printenv AGENT_QDRANT_URL >/dev/null \
   || fail "the ConfigMap did not reach the container"
 

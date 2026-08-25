@@ -18,7 +18,7 @@ IMAGE_TAG      ?= dev
 NAMESPACE      ?= ai-platform
 
 .PHONY: help deps registry cluster up build push \
-        deploy deploy-qdrant deploy-ollama deploy-agent all smoke down clean
+        deploy deploy-qdrant deploy-ollama deploy-agent all smoke bench down clean
 
 help:
 	@echo "make deps     check that docker, kind, kubectl and helm are installed"
@@ -28,6 +28,7 @@ help:
 	echo "make deploy   install qdrant, then ollama, then the agent"
 	echo "make all      up + build + push + deploy"
 	echo "make smoke    end-to-end checks"
+	echo "make bench    measure the inference tier"
 	echo "make down     delete the cluster"
 	echo "make clean    delete the cluster and the registry"
 
@@ -108,6 +109,9 @@ all: up build push deploy
 
 smoke:
 	@NAMESPACE=$(NAMESPACE) bash scripts/smoke.sh
+
+bench:
+	@NAMESPACE=$(NAMESPACE) bash scripts/bench.sh
 
 down:
 	-kind delete cluster --name $(CLUSTER_NAME)

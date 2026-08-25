@@ -1,0 +1,23 @@
+{{- /*
+The Modelfile the init container builds `model.servedAs` from. Everything here
+comes from values, so tuning inference is a `helm upgrade` and not a template
+change; the checksum annotation on the Deployment rebuilds the model when it
+changes.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ollama.fullname" . }}-modelfile
+  labels:
+    {{- include "ollama.labels" . | nindent 4 }}
+data:
+  Modelfile: |
+    FROM {{ include "ollama.baseModel" . }}
+    PARAMETER num_ctx {{ .Values.inference.contextLength }}
+    PARAMETER num_predict {{ .Values.inference.numPredict }}
+    PARAMETER top_k {{ .Values.inference.topK }}
+    PARAMETER top_p {{ .Values.inference.topP }}
+    PARAMETER num_gpu 0
+    {{- if gt (int .Values.inference.numThread) 0 }}
+    PARAMETER num_thread {{ .Values.inference.numThread }}
+    {{- end }}
