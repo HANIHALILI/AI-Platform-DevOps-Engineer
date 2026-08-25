@@ -41,9 +41,9 @@ inference:
 server:
   # Requests decoded concurrently per model. Each holds its own context window,
   # so memory scales with this.
-  # Three slots test whether the fourth available CPU core raises aggregate
-  # throughput while the 24Gi memory limit keeps their context windows safe.
-  numParallel: 3
+  # Boundary test: one slot per CPU. Keep this only if the aggregate benchmark
+  # improves materially over three slots.
+  numParallel: 4
   # The LLM and the embedding model, both resident.
   maxLoadedModels: 2
   # How long an idle model stays loaded. Short values give the memory back and
