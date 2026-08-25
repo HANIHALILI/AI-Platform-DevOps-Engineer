@@ -81,9 +81,7 @@ class Rag:
                 event("collection missing — run scripts/index.py", logging.WARNING)
             raise RagUnavailable(type(exc).__name__) from exc
         finally:
-            duration = time.perf_counter() - started
-            qdrant_search_seconds.labels(status).observe(duration)
-            event("qdrant_search", status=status, duration_ms=round(duration * 1000))
+            qdrant_search_seconds.labels(status).observe(time.perf_counter() - started)
         return [Hit(doc.page_content, doc.metadata["source"], score) for doc, score in results]
 
     # force_recreate gives full-rebuild semantics in one keyword: no incremental path, and stale

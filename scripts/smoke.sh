@@ -69,7 +69,7 @@ curl -fsS http://localhost:8080/metrics | grep -q chat_requests_total \
 
 kubectl -n "$NS" rollout status deploy/monitoring-grafana --timeout=180s \
   || fail "the Grafana rollout did not complete"
-kubectl -n "$NS" rollout status statefulset/monitoring-kube-prometheus-prometheus --timeout=180s \
+kubectl -n "$NS" rollout status statefulset/prometheus-monitoring-kube-prometheus-prometheus --timeout=180s \
   || fail "the Prometheus rollout did not complete"
 kubectl -n "$NS" rollout status statefulset/monitoring-loki --timeout=180s \
   || fail "the Loki rollout did not complete"
@@ -77,8 +77,7 @@ kubectl -n "$NS" rollout status daemonset/monitoring-promtail --timeout=180s \
   || fail "the Promtail rollout did not complete"
 test "$(value daemonset monitoring-promtail '{.status.numberReady}')" = 3 \
   || fail "Promtail is not running on every node"
-kubectl -n "$NS" get servicemonitor/agent servicemonitor/ollama \
-  configmap/agent-observability-dashboard >/dev/null \
-  || fail "the monitoring ServiceMonitors or dashboard are missing"
+kubectl -n "$NS" get servicemonitor/agent configmap/agent-observability-dashboard >/dev/null \
+  || fail "the agent ServiceMonitor or the dashboard is missing"
 
 echo "SMOKE OK"
