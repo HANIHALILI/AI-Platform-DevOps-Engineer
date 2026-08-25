@@ -41,7 +41,9 @@ inference:
 server:
   # Requests decoded concurrently per model. Each holds its own context window,
   # so memory scales with this.
-  numParallel: 1
+  # Two slots let the four-client aggregate test make progress concurrently
+  # without the four-way CPU oversubscription that a value of 4 would cause.
+  numParallel: 2
   # The LLM and the embedding model, both resident.
   maxLoadedModels: 2
   # How long an idle model stays loaded. Short values give the memory back and
