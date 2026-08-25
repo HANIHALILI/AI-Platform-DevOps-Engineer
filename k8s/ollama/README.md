@@ -54,6 +54,21 @@ the Pod, and the init container rebuilds `agent-llm` from weights already on the
 
 ## Quantization
 
+### Measured selection
+
+The deployed profile is `qwen3:4b-q8_0`, with 4 CPU threads, 4 parallel
+requests, an 8192-token context and a 20 GiB request / 24 GiB limit. Under the
+fixed benchmark it reached 26.81 aggregate tok/s and 9772 MiB RSS. The directly
+measured `q4_K_M` profile reached 20.98 aggregate tok/s and 7560 MiB RSS. In
+exchange for the 2.16 GiB higher resident footprint, `q8_0` adds 1.65 s to cold
+TTFT (7.89 s vs 6.24 s) but yields 27.8% more aggregate throughput. It also
+retains more weight precision than a 4-bit quantization, which is the expected
+direction for text quality; task-quality evaluation remains workload-specific.
+
+The selected profile has roughly 14 GiB of headroom below its 24 GiB limit. If
+memory density or cold-start latency is more important than throughput and
+precision, switch `model.quantization` back to `q4_K_M`.
+
 `Q4_K_M` is a llama.cpp K-quant. Weights are stored in blocks with their own scale at roughly four
 bits each, and the tensors that suffer most under compression, attention `wv` and the `w2`
 projections, are kept at six. The `M` is that medium mix.

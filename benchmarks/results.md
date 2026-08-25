@@ -27,7 +27,8 @@ environment and does not represent GPU offload.
 
 | Model | Quantization | Container RSS | Cold TTFT | Warm mean tok/s | Aggregate tok/s |
 | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |
+| `qwen3:4b` | `q4_K_M` | 7560Mi | 6.24 s | 8.26 | 20.98 |
+| `qwen3:4b` | `q8_0` | 9772Mi | 7.89 s | 11.25 | 26.81 |
 
 ## Runtime optimization
 
@@ -37,9 +38,11 @@ environment and does not represent GPU offload.
 | memory request/limit: 4Gi/8Gi → 20Gi/24Gi | `qwen3:4b-q4_K_M`; `numParallel=2` | 9.31 | 9.21 | 12.59 | 12.49 | No material throughput benefit: higher limit creates safe headroom for additional slots rather than accelerating two slots. |
 | `OLLAMA_NUM_PARALLEL`: 2 → 3 | `qwen3:4b-q4_K_M`; 20Gi/24Gi memory | 9.21 | 9.26 | 12.49 | 14.34 | RSS rose 5267Mi → 6415Mi; third slot improved aggregate throughput 14.8%. |
 | `OLLAMA_NUM_PARALLEL`: 3 → 4 | `qwen3:4b-q4_K_M`; 20Gi/24Gi memory | 8.61 | 8.26 | 12.83 | 20.98 | RSS rose 6423Mi → 7560Mi; aggregate throughput rose 63%, so four slots is the selected configuration. |
+| quantization: `q4_K_M` → `q8_0` | `qwen3:4b`; 4 slots; 20Gi/24Gi memory | 8.26 | 11.25 | 20.98 | 26.81 | `q8_0` added 2212Mi RSS and 1.65s cold TTFT, but improved aggregate throughput 27.8%; selected while the 24Gi limit leaves 14Gi headroom. |
 
 ## Final conclusion
 
 | Decision | Evidence | Result |
 | --- | --- | --- |
 | CPU-only baseline | `llama3.2:3b-instruct-q4_K_M` on GCP `n4-standard-8` | Baseline measurements above; CPU-only verified in the Ollama runner log. |
+| Selected inference profile | `qwen3:4b-q8_0`; 4 CPU threads; 4 parallel slots; 8192 context; 20Gi/24Gi memory | Best measured aggregate throughput (26.81 tok/s); accepts higher RAM and cold-start latency for throughput and higher-precision weights. |
