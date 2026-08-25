@@ -69,10 +69,13 @@ persistence:
 resources:
   requests:
     cpu: "1"
-    memory: 4Gi
+    # Reserve enough memory for the two active 8192-token slots so the
+    # scheduler cannot place competing memory-heavy work on this node.
+    memory: 20Gi
   limits:
     cpu: "4"
-    memory: 8Gi
+    # The node has 32Gi; leave headroom for Kubernetes and other workloads.
+    memory: 24Gi
 
 # The image ships no non-root user. HOME is set to the mounted volume in the
 # Deployment, so the models and the registry key Ollama generates land there
