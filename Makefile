@@ -6,6 +6,7 @@ SHELL := /bin/bash
 CLUSTER_NAME   ?= ai-platform-cluster
 KIND_CONFIG    ?= k8s/kind-config.yaml
 METRICS_SERVER_VERSION ?= v0.7.2
+ARGOCD_VERSION         ?= v3.4.6
 
 # One container under two names: localhost:5001 from the host, kind-registry:5000
 # from the nodes.
@@ -14,11 +15,13 @@ REGISTRY_PORT  ?= 5001
 REGISTRY_IMAGE ?= registry:3
 
 IMAGE          ?= localhost:$(REGISTRY_PORT)/agent
-IMAGE_TAG      ?= dev
+# The image is built from app/, so the commit that last touched it names the
+# image and re-releasing an unchanged app is a no-op.
+IMAGE_TAG      ?= $(shell git log -1 --format=%h -- app)
 NAMESPACE      ?= ai-platform
 
 .PHONY: help deps registry cluster up build push \
-	deploy deploy-qdrant deploy-ollama deploy-agent install-argocd gitops all \
+	deploy deploy-qdrant deploy-ollama deploy-agent install-argocd gitops release all \
 	smoke bench down clean
 
 help:
@@ -26,9 +29,10 @@ help:
 	echo "make up       local registry + 3-node cluster"
 	echo "make build    build $(IMAGE):$(IMAGE_TAG)"
 	echo "make push     push it to the local registry"
-	echo "make deploy   install qdrant, then ollama, then the agent"
-	echo "make gitops    install Argo CD and enable automatic chart sync"
-	echo "make all      up + build + push + deploy"
+	echo "make deploy   install the three charts with helm, bypassing Argo CD"
+	echo "make gitops   install Argo CD and enable automatic chart sync"
+	echo "make release  push the image and record its tag in git for Argo CD"
+	echo "make all      up + release + gitops"
 	echo "make smoke    end-to-end checks"
 	echo "make bench    measure the inference tier"
 	echo "make down     delete the cluster"
@@ -99,8 +103,8 @@ deploy-qdrant:
 deploy-ollama:
 	@helm upgrade --install ollama k8s/ollama -n $(NAMESPACE) --create-namespace
 
-# `dev` is a moving tag, so nothing in the release changes between builds and
-# helm would report "no changes". The timestamp is what rolls the Pods.
+# Bypasses Argo CD, for the inner loop. The tag only moves when app/ is
+# committed, so the timestamp is what rolls the Pods in between.
 deploy-agent:
 	@helm upgrade --install agent k8s/agent -n $(NAMESPACE) --create-namespace \
 	  --set image.repository=$(IMAGE) --set image.tag=$(IMAGE_TAG) \
@@ -109,13 +113,22 @@ deploy-agent:
 
 install-argocd:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-	kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+	kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/$(ARGOCD_VERSION)/manifests/install.yaml
 	kubectl -n argocd wait --for=condition=Available deployment --all --timeout=180s
 
 gitops: install-argocd
 	kubectl apply -f k8s/argocd/applications.yaml
 
-all: up build push deploy
+# The deployment path. The image tag is the commit the app was built from,
+# and the commit that writes it into values.yaml is what Argo CD syncs.
+release: push
+	@git diff --quiet HEAD || { echo "commit your changes first" >&2; exit 1; }
+	sed -i 's|^  tag: .*|  tag: $(IMAGE_TAG)|' k8s/agent/values.yaml
+	git diff --quiet k8s/agent/values.yaml || \
+	  git commit -q k8s/agent/values.yaml -m "release: agent $(IMAGE_TAG)"
+	git push origin HEAD
+
+all: up release gitops
 
 smoke:
 	@NAMESPACE=$(NAMESPACE) bash scripts/smoke.sh
