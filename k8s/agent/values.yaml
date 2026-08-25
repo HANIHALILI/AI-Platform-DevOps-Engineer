@@ -8,10 +8,9 @@ image:
   # The same reference pushed from the host; resolved in-cluster through the
   # containerd mirror on each node, so no imagePullSecrets are needed.
   repository: localhost:5001/agent
-  # The commit the image was built from, written by `make release`. Empty falls
-  # back to Chart.appVersion.
+  # The commit the image was built from, written by `make release`.
   tag: ""
-  # Always: the inner loop rebuilds and pushes the same tag.
+  # The inner loop rebuilds and pushes the same tag.
   pullPolicy: Always
 
 imagePullSecrets: []

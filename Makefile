@@ -16,14 +16,13 @@ REGISTRY_PORT  ?= 5001
 REGISTRY_IMAGE ?= registry:3
 
 IMAGE          ?= localhost:$(REGISTRY_PORT)/agent
-# The image is built from app/, so the commit that last touched it names the
-# image. This one names the checkout; release uses $(GITOPS_BRANCH)'s.
+# The image is built from app/, so the commit that last touched it names it.
 IMAGE_TAG      ?= $(shell git log -1 --format=%h -- app)
 NAMESPACE      ?= ai-platform
 
 .PHONY: help deps registry cluster up build push \
-	deploy deploy-qdrant deploy-ollama deploy-agent install-argocd gitops release all \
-	smoke bench down clean
+        deploy deploy-qdrant deploy-ollama deploy-agent install-argocd gitops \
+        release all smoke bench down clean
 
 help:
 	@echo "make deps     check that docker, kind, kubectl and helm are installed"
@@ -114,8 +113,7 @@ deploy-agent:
 
 install-argocd:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-	# The applicationsets CRD is larger than the annotation that client-side
-	# apply writes back into the object.
+	# --server-side: the applicationsets CRD is too big for the apply annotation.
 	kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/$(ARGOCD_VERSION)/manifests/install.yaml
 	kubectl -n argocd wait --for=condition=Available deployment --all --timeout=180s
 
@@ -126,17 +124,15 @@ gitops: install-argocd
 # the image is built in a throwaway worktree of it, and the tag that Argo CD
 # reads is committed onto it.
 release:
-	@git fetch -q origin $(GITOPS_BRANCH)
+	git fetch -q origin $(GITOPS_BRANCH)
 	work=$$(mktemp -d)
 	git worktree add -q --detach "$$work" origin/$(GITOPS_BRANCH)
 	trap 'git worktree remove --force "$$work"' EXIT
 	tag=$$(git -C "$$work" log -1 --format=%h -- app)
 	$(MAKE) -C "$$work" push IMAGE_TAG="$$tag"
 	sed -i "s|^  tag: .*|  tag: $$tag|" "$$work/k8s/agent/values.yaml"
-	git -C "$$work" diff --quiet k8s/agent/values.yaml || {
-	  git -C "$$work" commit -q k8s/agent/values.yaml -m "release: agent $$tag"
-	  git -C "$$work" push origin HEAD:$(GITOPS_BRANCH)
-	}
+	git -C "$$work" diff --quiet || git -C "$$work" commit -aqm "release: agent $$tag"
+	git -C "$$work" push origin HEAD:$(GITOPS_BRANCH)
 
 all: up release gitops
 
