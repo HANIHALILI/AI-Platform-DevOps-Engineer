@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import NamedTuple
 
@@ -10,7 +11,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from app.config import settings
-from app.observability import event
+from app.observability import event, qdrant_search_seconds
 
 EMBED_TIMEOUT = 30
 
@@ -69,13 +70,20 @@ class Rag:
         return len(chunks)
 
     async def search(self, query: str, k: int) -> list[Hit]:
+        started = time.perf_counter()
+        status = "ok"
         try:
             store = await self._connect()
             results = await store.asimilarity_search_with_score(query, k=k)
         except Exception as exc:
+            status = "error"
             if isinstance(exc, UnexpectedResponse) and exc.status_code == 404:
                 event("collection missing — run scripts/index.py", logging.WARNING)
             raise RagUnavailable(type(exc).__name__) from exc
+        finally:
+            duration = time.perf_counter() - started
+            qdrant_search_seconds.labels(status).observe(duration)
+            event("qdrant_search", status=status, duration_ms=round(duration * 1000))
         return [Hit(doc.page_content, doc.metadata["source"], score) for doc, score in results]
 
     # force_recreate gives full-rebuild semantics in one keyword: no incremental path, and stale

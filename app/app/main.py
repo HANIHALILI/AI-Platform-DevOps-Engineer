@@ -16,6 +16,7 @@ from app.observability import (
     chat_requests_total,
     chat_ttft_seconds,
     event,
+    request_id,
     request_id_middleware,
     setup_logging,
 )
@@ -51,39 +52,45 @@ async def index():
 
 @app.post("/chat")
 async def chat(body: ChatRequest, request: Request):
+    rid = request_id.get()
+
     async def stream():
-        event("request_start", message_length=len(body.message))
-        started = time.perf_counter()
-        ttft = None
-        iterations = 0
-        status = "ok"
+        token = request_id.set(rid)
         try:
-            async for chunk in run(request.app.state.agent, body.message):
-                if await request.is_disconnected():
-                    status = "disconnected"
-                    break
-                payload = decode(chunk)
-                if payload["type"] == "token" and ttft is None:
-                    ttft = time.perf_counter() - started
-                    chat_ttft_seconds.observe(ttft)
-                elif payload["type"] == "done":
-                    iterations = payload["iterations"]
-                yield chunk
-        except Exception as exc:
-            status = "error"
-            event("request_failed", logging.ERROR, error=type(exc).__name__)
-            yield sse(Error(message="internal error"))
+            event("request_start", message_length=len(body.message))
+            started = time.perf_counter()
+            ttft = None
+            iterations = 0
+            status = "ok"
+            try:
+                async for chunk in run(request.app.state.agent, body.message):
+                    if await request.is_disconnected():
+                        status = "disconnected"
+                        break
+                    payload = decode(chunk)
+                    if payload["type"] == "token" and ttft is None:
+                        ttft = time.perf_counter() - started
+                        chat_ttft_seconds.observe(ttft)
+                    elif payload["type"] == "done":
+                        iterations = payload["iterations"]
+                    yield chunk
+            except Exception as exc:
+                status = "error"
+                event("request_failed", logging.ERROR, error=type(exc).__name__)
+                yield sse(Error(message="internal error"))
+            finally:
+                duration = time.perf_counter() - started
+                chat_duration_seconds.observe(duration)
+                chat_requests_total.labels(status).inc()
+                event(
+                    "request_end",
+                    status=status,
+                    duration_ms=round(duration * 1000),
+                    ttft_ms=round(ttft * 1000) if ttft is not None else None,
+                    iterations=iterations,
+                )
         finally:
-            duration = time.perf_counter() - started
-            chat_duration_seconds.observe(duration)
-            chat_requests_total.labels(status).inc()
-            event(
-                "request_end",
-                status=status,
-                duration_ms=round(duration * 1000),
-                ttft_ms=round(ttft * 1000) if ttft is not None else None,
-                iterations=iterations,
-            )
+            request_id.reset(token)
 
     # X-Accel-Buffering is required: without it the nginx ingress buffers the response, and
     # streaming works locally but breaks in the cluster.

@@ -18,6 +18,9 @@ chat_requests_total = Counter("chat_requests_total", "Chat requests", ["status"]
 chat_ttft_seconds = Histogram("chat_ttft_seconds", "Request received to first token event")
 chat_duration_seconds = Histogram("chat_duration_seconds", "Full chat request duration")
 tool_calls_total = Counter("tool_calls_total", "Tool invocations", ["tool", "status"])
+qdrant_search_seconds = Histogram(
+    "qdrant_search_seconds", "Time spent querying Qdrant", ["status"]
+)
 
 
 class JsonFormatter(logging.Formatter):

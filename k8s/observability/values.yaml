@@ -1,0 +1,35 @@
+# Prometheus discovers the ServiceMonitors in this chart by this release label.
+kube-prometheus-stack:
+  prometheus:
+    prometheusSpec:
+      serviceMonitorSelector:
+        matchLabels:
+          release: monitoring
+  grafana:
+    adminPassword: admin
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+        labelValue: "1"
+        searchNamespace: ALL
+
+# Single-binary Loki is intentionally small for this local kind cluster.
+loki:
+  deploymentMode: SingleBinary
+  loki:
+    auth_enabled: false
+  singleBinary:
+    replicas: 1
+  read:
+    replicas: 0
+  write:
+    replicas: 0
+  backend:
+    replicas: 0
+
+# Promtail reads stdout/stderr from every node and adds Kubernetes labels.
+promtail:
+  config:
+    clients:
+      - url: http://monitoring-loki-gateway/loki/api/v1/push
