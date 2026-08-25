@@ -14,7 +14,7 @@ fullnameOverride: ""
 model:
   repository: qwen3
   variant: 4b
-  quantization: q4_K_M
+  quantization: q8_0
   servedAs: agent-llm
 
 # Embeddings, pulled as-is. all-minilm ships one 45MB build, so no quantization
