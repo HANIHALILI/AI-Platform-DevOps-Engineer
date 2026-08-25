@@ -12,8 +12,8 @@ fullnameOverride: ""
 # and what the agent asks for. Switching model or quantization is an edit here
 # and nowhere else, because `servedAs` does not change with it.
 model:
-  repository: llama3.2
-  variant: 3b-instruct
+  repository: qwen3
+  variant: 4b
   quantization: q4_K_M
   servedAs: agent-llm
 
