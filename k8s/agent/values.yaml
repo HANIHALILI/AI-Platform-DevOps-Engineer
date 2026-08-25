@@ -10,7 +10,7 @@ image:
   repository: localhost:5001/agent
   # Empty => Chart.appVersion. `dev` is a moving tag, which is why pullPolicy
   # below is Always.
-  tag: dev
+  tag: 155548c
   pullPolicy: Always
 
 imagePullSecrets: []
