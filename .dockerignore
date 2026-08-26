@@ -1,5 +1,5 @@
 # The context is the repository root; the Dockerfile only COPYs app/pyproject.toml,
-# app/uv.lock and app/app/. Patterns are **-prefixed because the sources live under app/.
+# app/uv.lock and app/agent/. Patterns are **-prefixed because the sources live under app/.
 
 # ~190 MB and 9,000+ files, all of it shipped to the daemon on every build.
 **/.venv

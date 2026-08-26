@@ -8,7 +8,7 @@ from prometheus_client import Counter, Histogram
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.config import settings
+from agent.config import settings
 
 request_id: ContextVar[str] = ContextVar("request_id", default="-")
 

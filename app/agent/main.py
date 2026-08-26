@@ -9,9 +9,9 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
-from app.agent import Error, build_agent, decode, run, sse
-from app.config import settings
-from app.observability import (
+from agent.agent import Error, build_agent, decode, run, sse
+from agent.config import settings
+from agent.observability import (
     chat_duration_seconds,
     chat_requests_total,
     chat_ttft_seconds,
@@ -20,8 +20,8 @@ from app.observability import (
     request_id_middleware,
     setup_logging,
 )
-from app.rag import Rag, RagUnavailable
-from app.tools import build_tools
+from agent.rag import Rag, RagUnavailable
+from agent.tools import build_tools
 
 READY_TIMEOUT = 5
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024

@@ -20,7 +20,7 @@ COPY app/pyproject.toml app/uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-install-project
 
-COPY app/app/ ./app/
+COPY app/agent/ ./agent/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-editable
 
@@ -39,4 +39,4 @@ USER 10001:10001
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8000"]

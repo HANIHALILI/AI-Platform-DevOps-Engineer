@@ -1,7 +1,7 @@
 # Passed to the upstream chart; anything not listed keeps its default.
 # See `helm show values qdrant/qdrant --version 1.19.0`.
 qdrant:
-  # Plain `qdrant`, which is what app/app/config.py defaults to.
+  # Plain `qdrant`, which is what app/agent/config.py defaults to.
   fullnameOverride: qdrant
 
   replicaCount: 1

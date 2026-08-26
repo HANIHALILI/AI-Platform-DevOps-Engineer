@@ -35,7 +35,7 @@ wait_for() {
 
 uv run python scripts/mock_llm.py &
 MOCK_PID=$!
-uv run uvicorn app.main:app --host 127.0.0.1 --port "$APP_PORT" --log-level warning &
+uv run uvicorn agent.main:app --host 127.0.0.1 --port "$APP_PORT" --log-level warning &
 APP_PID=$!
 
 wait_for "http://127.0.0.1:${MOCK_PORT}/v1/models" "$MOCK_PID" "the mock server on port ${MOCK_PORT}" || exit 1

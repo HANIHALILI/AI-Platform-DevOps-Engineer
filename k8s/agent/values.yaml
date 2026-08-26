@@ -39,7 +39,7 @@ service:
 containerPort: 8000
 
 # Rendered into a ConfigMap and consumed with `envFrom`. Anything left out keeps the
-# default app/app/config.py declares. A change here rolls the Pods via the checksum.
+# default app/agent/config.py declares. A change here rolls the Pods via the checksum.
 config:
   AGENT_LOG_LEVEL: INFO
   # Spelled out even though they match the app defaults: where the agent connects

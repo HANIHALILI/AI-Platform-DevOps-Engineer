@@ -48,7 +48,7 @@ server:
 
 service:
   type: ClusterIP
-  # Ollama's own port, and the one app/app/config.py defaults to.
+  # Ollama's own port, and the one app/agent/config.py defaults to.
   port: 11434
 
 # Model cache. Without it every restart re-downloads the weights.

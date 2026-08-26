@@ -10,8 +10,8 @@ from langchain_qdrant import QdrantVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client.http.exceptions import UnexpectedResponse
 
-from app.config import settings
-from app.observability import event, qdrant_search_seconds
+from agent.config import settings
+from agent.observability import event, qdrant_search_seconds
 
 EMBED_TIMEOUT = 30
 

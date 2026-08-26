@@ -9,7 +9,7 @@ from langgraph.errors import GraphRecursionError
 from langgraph.prebuilt import ToolNode, create_react_agent
 from pydantic import BaseModel
 
-from app.config import settings
+from agent.config import settings
 
 LLM_TIMEOUT = 120
 

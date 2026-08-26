@@ -4,7 +4,7 @@ A FastAPI service with a streaming `/chat` endpoint. A LangGraph agent decides w
 tools — a Qdrant document search and a clock. It runs on a local kind cluster with Ollama as the
 inference server and Qdrant as the vector store, one Helm chart each under `k8s/`.
 
-`app/app/config.py` lists every setting the service reads.
+`app/agent/config.py` lists every setting the service reads.
 `k8s/ollama/README.md` covers the inference tier — the quantized model it serves, what is tunable,
 and how to measure it. `k8s/argocd/README.md` covers the GitOps flow.
 
@@ -64,10 +64,9 @@ make all     # the same, plus the image release and Argo CD
 
 `make deploy` installs Qdrant, Ollama, the agent and monitoring with Helm, bypassing Argo CD. The
 application order matters. The agent's `/readyz` returns 503 while the LLM is unreachable, so its
-rollout will not finish until Ollama is Ready — and Ollama's first start downloads ~2GB of models in
-an init container, then builds the model the agent calls from a Modelfile, before it serves anything
-(`kubectl logs -f -l app=ollama -c pull-models`). The models sit on a PVC, so later restarts skip
-the download.
+rollout will not finish until Ollama is Ready. An init container builds the model the agent calls
+from a Modelfile before Ollama serves anything
+(`kubectl logs -f -l app=ollama -c pull-models`). The models sit on a PVC.
 
 `make gitops` installs Argo CD and gives each of the four charts an Application that watches `main`,
 syncs, prunes and self-heals — so a chart edited by hand, or a `make deploy-agent` from the inner

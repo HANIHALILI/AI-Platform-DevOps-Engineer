@@ -4,8 +4,8 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from app.config import settings
-from app.rag import Rag
+from agent.config import settings
+from agent.rag import Rag
 
 
 def main() -> None:

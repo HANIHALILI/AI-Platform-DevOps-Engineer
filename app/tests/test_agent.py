@@ -2,9 +2,9 @@ import pytest
 from langchain_core.messages import AIMessageChunk, ToolMessage
 from langchain_core.tools import ToolException
 
-from app.agent import decode, run
-from app.rag import RagUnavailable
-from app.tools import build_tools
+from agent.agent import decode, run
+from agent.rag import RagUnavailable
+from agent.tools import build_tools
 
 
 class FakeAgent:
