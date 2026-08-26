@@ -8,6 +8,37 @@ inference server and Qdrant as the vector store, one Helm chart each under `k8s/
 `k8s/ollama/README.md` covers the inference tier — the quantized model it serves, what is tunable,
 and how to measure it. `k8s/argocd/README.md` covers the GitOps flow.
 
+## Architecture
+
+```
+                 http://localhost:8080
+                          |
+                 NodePort 30080  (mapped by kind)
+                          |
+                   +------v------+
+                   |    agent    |  FastAPI + LangGraph, 2-4 replicas, HPA on CPU
+                   +--+-------+--+
+                      |       |
+      OpenAI /v1 -----+       +----- REST :6333
+                      |       |
+             +--------v-+   +-v--------+
+             |  ollama  |   |  qdrant  |
+             | agent-llm|   |   docs   |
+             +----------+   +----------+
+              ClusterIP       ClusterIP
+```
+
+| Component | Chart | Workload | Service |
+|---|---|---|---|
+| Agent | `k8s/agent` | Deployment, 2–4 replicas behind an HPA | NodePort 30080 |
+| Inference | `k8s/ollama` | Deployment, one replica on a PVC | ClusterIP 11434 |
+| Vector store | `k8s/qdrant` | StatefulSet, upstream chart | ClusterIP 6333 |
+| Monitoring | `k8s/observability` | Prometheus, Grafana, Loki, Promtail | — |
+
+The cluster is kind: one control-plane node and two workers labelled `workload=agent`, which is what
+the agent's topology spread constraint schedules across. Argo CD watches this repository and syncs
+all four charts, so the cluster follows `main` rather than whatever was last applied by hand.
+
 ## Without a cluster
 
 Runs the service against a mock LLM, with Qdrant pointed at a closed port so the search tool takes
@@ -133,3 +164,9 @@ Promtail sends stdout/stderr from all pods to Loki. In Grafana Explore:
 ```logql
 {namespace="ai-platform", app="agent"} | json | request_id != "-"
 ```
+
+Ollama is measured through the agent that calls it. `chat_ttft_seconds` is the engine's latency,
+a cold model load included; `chat_duration_seconds` tracks its generation speed;
+`chat_requests_total{status}` counts what failed, since a call the engine cannot serve ends the
+stream in error; and `/readyz` returns 503 while the LLM is unreachable, so an outage shows up as
+agent replicas leaving the Service endpoints. Pod CPU and memory cover saturation.

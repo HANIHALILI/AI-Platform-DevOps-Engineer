@@ -5,6 +5,11 @@ the Agent, and monitoring. Each watches `main`, syncs automatically, and prunes 
 self-heals, so a change to a chart or its values reaches the cluster on its own and a
 manual `kubectl edit` is undone.
 
+The Applications pull over anonymous HTTPS, so the repository has to be public — which the
+submission requires anyway. A private one needs a Secret in the `argocd` namespace labelled
+`argocd.argoproj.io/secret-type: repository`, carrying the URL and an HTTPS token or SSH key. The
+Applications themselves do not change.
+
 Monitoring syncs with `ServerSideApply=true`, because the Prometheus CRDs are too
 big for the apply annotation. Its three upstream charts are pinned to exact versions
 in `k8s/observability/Chart.yaml`, so none of them can move without a commit.
