@@ -132,15 +132,17 @@ nodeSelector:
 tolerations: []
 affinity: {}
 
-# One Pod per node. With DoNotSchedule, replicas that cannot spread stay Pending
-# instead of quietly co-locating.
+# Even spread to within one Pod: at two replicas that is one per worker, so a
+# lost node cannot take both. Scaling past two doubles up rather than staying
+# Pending - maxSkew bounds the difference between nodes, not the count on one.
 topologySpread:
   enabled: true
   maxSkew: 1
   topologyKey: kubernetes.io/hostname
   whenUnsatisfiable: DoNotSchedule
 
-# maxSurge 0: with topologySpread on DoNotSchedule a surge Pod has no node to land on.
+# maxSurge 0: replaced one at a time, never above the target count. A surge Pod
+# would be scheduled, but doubled up on one worker for the length of the roll.
 updateStrategy:
   type: RollingUpdate
   rollingUpdate:
