@@ -115,7 +115,7 @@ deploy-agent:
 	kubectl -n $(NAMESPACE) get pods -o wide
 
 deploy-monitoring:
-	@ls k8s/observability/charts/*.tgz >/dev/null 2>&1 || helm dependency build k8s/observability
+	@ls k8s/observability/charts/*.tgz >/dev/null 2>&1 || helm dependency update k8s/observability
 	helm upgrade --install monitoring k8s/observability -n $(NAMESPACE) --create-namespace
 
 install-argocd:

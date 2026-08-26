@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="AGENT_")
 
     llm_url: str = "http://ollama:11434/v1"
-    llm_model: str = "llama3.2:3b"
+    llm_model: str = "qwen3:4b"
     llm_key: str = "not-needed"
     llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     embed_url: str = "http://ollama:11434"

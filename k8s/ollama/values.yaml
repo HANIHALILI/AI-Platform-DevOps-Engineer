@@ -37,8 +37,8 @@ inference:
 # these bound the server across all models and requests.
 server:
   # Requests decoded concurrently per model. Each holds its own context window, so
-  # memory scales with this. One slot per CPU: the fourth raised aggregate throughput
-  # 63% over three (benchmarks/results.md).
+  # memory scales with this. One slot per CPU: the fourth took aggregate throughput
+  # from 14.34 to 20.98 tok/s (benchmarks/raw/).
   numParallel: 4
   # The LLM and the embedding model, both resident.
   maxLoadedModels: 2

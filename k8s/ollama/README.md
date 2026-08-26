@@ -118,7 +118,7 @@ It port-forwards to the Ollama Pod and reports:
 | Init container duration, scheduled to Ready | Pod status timestamps |
 | **TTFT** | the client's own clock, across a `stream=true` request |
 | Model load, prompt eval | `load_duration`, `prompt_eval_duration`, from that same request |
-| Resident size and how much of it is on the CPU | `ollama ps` |
+| Resident size of each loaded model | `ollama ps` |
 | Container RSS | `kubectl top pod` |
 | Tokens/sec, one request at a time | `eval_count / eval_duration` |
 | Tokens/sec aggregate, `PARALLEL` at once | tokens summed over the wall clock |
@@ -158,9 +158,9 @@ under `benchmarks/raw/` and the graded answers under `benchmarks/quality/raw/`, 
 `n4-standard-8`, CPU-only.
 
 `server.numParallel` is what moved the aggregate number, not the model: at one slot the server
-serialises and the aggregate collapses onto the sequential rate. Each slot added through four
-raised it, the fourth by 63%, at roughly 1.1 GiB of resident memory apiece. Four is one slot per
-CPU, which is where the chart sits.
+serialises, four requests take four turns, and the aggregate lands below the sequential rate at
+5.98 tok/s. Every slot added through four raised it, the fourth from 14.34 to 20.98, at roughly
+1.1 GiB of resident memory apiece. Four is one slot per CPU, which is where the chart sits.
 
 Text quality is the part `make bench` cannot see, so `make quality` covers it separately: five
 deterministic prompts, each declaring the concepts a grounded answer has to contain, with the full

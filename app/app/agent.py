@@ -67,6 +67,7 @@ class Done(BaseModel):
 class Error(BaseModel):
     type: Literal["error"] = "error"
     message: str
+    iterations: int = 0
 
 
 Event = Token | ToolCall | ToolResult | Done | Error
@@ -125,4 +126,7 @@ async def run(agent, message: str) -> AsyncIterator[str]:
                         )
     except GraphRecursionError:
         cut_off = True
-    yield sse(Error(message="iteration limit reached") if cut_off else Done(iterations=iterations))
+    if cut_off:
+        yield sse(Error(message="iteration limit reached", iterations=iterations))
+    else:
+        yield sse(Done(iterations=iterations))

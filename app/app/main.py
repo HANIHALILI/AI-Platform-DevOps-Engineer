@@ -70,7 +70,7 @@ async def chat(body: ChatRequest, request: Request):
                 if payload["type"] == "token" and ttft is None:
                     ttft = time.perf_counter() - started
                     chat_ttft_seconds.observe(ttft)
-                elif payload["type"] == "done":
+                elif payload["type"] in ("done", "error"):
                     iterations = payload["iterations"]
                 yield chunk
         except Exception as exc:

@@ -77,7 +77,7 @@ class Rag:
         except Exception as exc:
             status = "error"
             if isinstance(exc, UnexpectedResponse) and exc.status_code == 404:
-                event("collection missing, run scripts/index.py", logging.WARNING)
+                event("collection_missing", logging.WARNING)
             raise RagUnavailable(type(exc).__name__) from exc
         finally:
             qdrant_search_seconds.labels(status).observe(time.perf_counter() - started)

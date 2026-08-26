@@ -14,7 +14,7 @@ TOOL_TIMEOUT = 10
 
 def build_tools(rag: Rag) -> list[BaseTool]:
     @tool
-    async def search_docs(query: str, top_k: int = 3) -> str:
+    async def search_docs(query: str, top_k: int = settings.top_k) -> str:
         """Search the internal knowledge base. Use this when the user asks about internal
         documentation or facts you are not sure about."""
         event("tool_call", tool="search_docs")
