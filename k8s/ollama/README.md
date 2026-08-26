@@ -1,8 +1,8 @@
 # Inference tier
 
 ```
-agent  --HTTP-->  ollama  -->  agent-llm  -->  llama3.2:3b-instruct-q4_K_M  -->  CPU
-                              (Modelfile)         (quantized GGUF weights)
+agent  --HTTP-->  ollama  -->  agent-llm  -->  qwen3:4b-q4_K_M  -->  CPU
+                              (Modelfile)      (quantized GGUF weights)
 ```
 
 The agent never names a base model. It asks for `agent-llm`, which the init container builds from a
@@ -46,8 +46,8 @@ model:
 The three fields compose into the tag Ollama pulls, `qwen2.5:7b-instruct-q4_K_M`. Any tag that
 exists on ollama.com works; check `ollama.com/library/<repository>/tags` first, because a variant
 and a quantization that do not pair leave the init container retrying a pull that cannot succeed.
-Raise `resources` to match, since a 7B at q4_K_M is roughly 4.4GB of weights against 1.9GB for this
-3B, and move `inference.numThread` with `resources.limits.cpu` if you change it.
+Raise `resources` to match, since a 7B at q4_K_M is roughly 4.4GB of weights against 2.5GB for the
+4B served here, and move `inference.numThread` with `resources.limits.cpu` if you change it.
 
 Retuning is the same edit against `inference`, and costs no download: the checksum annotation rolls
 the Pod, and the init container rebuilds `agent-llm` from weights already on the volume.
@@ -59,7 +59,8 @@ bits each, and the tensors that suffer most under compression, attention `wv` an
 projections, are kept at six. The `M` is that medium mix.
 
 Read from the Ollama registry manifests for `llama3.2` 3B on 2026-08-25, against a parameter count
-of 3.21B:
+of 3.21B. That was the chart's first base model and the benchmark baseline; the ratios are what
+matter here, and they hold for the 4B served now:
 
 | Tag | Weights on disk | Bits/parameter | Relative |
 |---|---|---|---|
@@ -70,15 +71,14 @@ of 3.21B:
 | `fp16` | 5.99 GiB | 16.03 | 3.19x |
 
 **Why q4_K_M here.** It is the smallest K-quant still generally held to sit close to fp16 in
-quality, and this stack runs on kind, on CPU, under an 8GB memory limit. Weights are only part of
-what has to fit: an 8192-token KV cache is another 0.88 GiB, before compute buffers and the resident
-embedding model. q6_K would add 0.58 GiB of weights for a difference this workload, tool-call
-routing and short grounded answers, is unlikely to show. Choosing q4_K_M over fp16 saves 4.11 GiB,
-which is the difference between fitting the default limits and not.
+quality, and this stack runs on kind, on CPU. Weights are only part of what has to fit: each of the
+four decode slots holds its own 8192-token KV cache, and the embedding model stays resident
+alongside. The whole process measures 7.6 GiB against the 24 GiB limit. A heavier quant buys back
+memory that four slots want more, for a difference this workload of tool-call routing and short
+grounded answers is unlikely to show.
 
-`llama3.2:3b`, the tag this chart used before, resolves to the same digest as
-`llama3.2:3b-instruct-q4_K_M` — so the served quantization has not changed, only whether it is
-stated or inherited from whatever Ollama happens to make `:3b` mean.
+The tag is spelled out in full rather than left as `qwen3:4b`, so the quantization is stated and
+not inherited from whatever Ollama makes the short tag mean.
 
 ## Initialization
 
@@ -138,29 +138,29 @@ is the one the tag asked for, and that the agent points at a model Ollama serves
 
 ### Results
 
-**No measurements have been taken.** This repository targets a local kind cluster, and none was
-available when the chart was written: no Docker, no cluster, and no NVIDIA GPU on the machine.
-Every number above is a file size read from the registry or arithmetic from the published
-architecture. Run `make bench` on the real Linux cluster and fill this in.
+Every run is logged in [`benchmarks/results.md`](../../benchmarks/results.md), with the raw stdout
+under `benchmarks/raw/`. Both columns are a GCP `n4-standard-8`, CPU-only: the first is the original
+baseline, the second is what this chart serves now.
 
-| | q4_K_M | q6_K |
+| | `llama3.2:3b-q4_K_M` | `qwen3:4b-q4_K_M` |
 |---|---|---|
-| Scheduled to Ready | | |
-| Model load, cold | | |
-| TTFT, cold | | |
-| TTFT, warm | | |
-| Resident size | | |
-| Tokens/sec, sequential | | |
-| Tokens/sec, 4 at once | | |
+| Container limit | 4 CPU / 8 GiB | 4 CPU / 24 GiB |
+| `numParallel` | 1 | 4 |
+| Scheduled to Ready | 106 s | 21 s |
+| Model load, cold | 3.07 s | 3.32 s |
+| Container RSS | 3317 MiB | 7560 MiB |
+| Tokens/sec, sequential | 11.38 | 8.26 |
+| Tokens/sec, 4 at once | 11.29 | 20.98 |
 
-Direction only, for what to expect — none of this was run here and none of it should be quoted as a
-result. Memory is the one not really in doubt: weights are read into memory much as they are stored,
-so q6_K should cost about the extra 0.58 GiB, and the KV cache does not move with the quantization
-of the weights. Throughput on CPU is usually bound by memory bandwidth rather than compute, so
-fewer bits per weight generally means more tokens/sec. Startup should track file size. Quality is
-the trade-off being made and the one this setup cannot measure: fewer bits means more rounding
-error, and how much that matters depends on the task. If answers degrade, `q5_K_M` and `q6_K` are
-one edit away, and the table above says what they cost.
+`qwen3:4b` is the larger model and the slower one on a single request, so the sequential number goes
+the way it should. The aggregate number is set by `server.numParallel` rather than by the model: at
+one slot the server serialises, which is why the baseline's aggregate collapses onto its sequential
+rate. Each slot added through four raised it, the fourth by 63%, at roughly 1.1 GiB of resident
+memory apiece. Four is one slot per CPU, which is where the chart sits.
+
+Quantization is the trade-off this setup cannot measure: fewer bits means more rounding error, and
+how much that matters depends on the task. If answers degrade, `q5_K_M` and `q6_K` are one edit
+away, and the table above says what they cost in memory.
 
 ## CPU-only
 

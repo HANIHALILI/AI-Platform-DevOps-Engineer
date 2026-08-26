@@ -4,9 +4,8 @@ description: Prometheus, Grafana, Loki and Promtail for the AI platform
 type: application
 version: 0.1.0
 kubeVersion: ">=1.27.0-0"
-# Pinned exactly, and Chart.lock and charts/*.tgz are committed: Argo CD renders
-# this chart from the lock, so a range would put an upstream release in the
-# cluster with no commit behind it.
+# Exact versions, no ranges: an upstream release must not reach the cluster without
+# a commit behind it. `helm dependency build` fetches them.
 dependencies:
   - name: kube-prometheus-stack
     version: "75.18.1"

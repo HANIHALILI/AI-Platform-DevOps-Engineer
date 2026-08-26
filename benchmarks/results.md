@@ -1,10 +1,8 @@
 # Benchmark results
 
-All entries are CPU-only unless noted otherwise. Empty cells are intentionally
-left empty until a real measurement is available. Raw command output belongs in
-[`raw/`](raw/). The Ollama startup log verifies `no usable GPU found` and
-`library=cpu`; its `ollama ps` CPU/GPU split is a misleading display in this
-environment and does not represent GPU offload.
+All entries are CPU-only. Raw command output belongs in [`raw/`](raw/). The Ollama
+startup log verifies `no usable GPU found` and `library=cpu`; the `ollama ps` CPU/GPU
+split is a misleading display here and does not represent GPU offload.
 
 ## Baseline
 
@@ -19,15 +17,9 @@ environment and does not represent GPU offload.
 | --- | --- | --- | --- | --- | --- |
 | `llama3.2:3b-instruct` | `q4_K_M` | 3.62 s | 11.38 | 11.29 | Baseline model; CPU-only verified from runner logs |
 | `qwen3:4b` | `q4_K_M` | invalid | 9.10 | 5.98 | TTFT parser did not recognize `thinking`; CPU-only verified from runner logs |
-| `qwen3:14b` | `q4_K_M` |  |  |  |  |
-| `qwen3:27b` | `q4_K_M` |  |  |  |  |
-| `qwen3:30b` | `q4_K_M` |  |  |  |  |
 
-## Quantization comparison
-
-| Model | Quantization | Container RSS | Cold TTFT | Warm mean tok/s | Aggregate tok/s |
-| --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |
+Both rows are at `numParallel=1`; the parallelism work below is what moves the
+aggregate column.
 
 ## Runtime optimization
 
@@ -43,3 +35,5 @@ environment and does not represent GPU offload.
 | Decision | Evidence | Result |
 | --- | --- | --- |
 | CPU-only baseline | `llama3.2:3b-instruct-q4_K_M` on GCP `n4-standard-8` | Baseline measurements above; CPU-only verified in the Ollama runner log. |
+| Serve `qwen3:4b-q4_K_M` | Model comparison above | Slower on one request than the 3B baseline, and the model the platform keeps. |
+| `numParallel: 4`, memory 20Gi/24Gi | Runtime optimization above | 20.98 tok/s aggregate against 5.98 at one slot, at 7560Mi resident. |

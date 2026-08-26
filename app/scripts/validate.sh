@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Proves /chat works with no Ollama and no Qdrant: the mock server stands in for the LLM, and
+# /chat with no Ollama and no Qdrant: the mock server stands in for the LLM, and
 # AGENT_QDRANT_URL points at a closed port so search_docs takes its fallback path.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -20,8 +20,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Checks the process too: a server that could not bind its port is already gone, and
-# without this the loop waits out its full budget on whoever else holds that port.
+# Checks the process too, or a server that could not bind its port waits out the full budget
+# on whoever else holds it.
 wait_for() {
   local url=$1 pid=$2 name=$3
   for _ in $(seq 1 30); do

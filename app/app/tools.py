@@ -25,8 +25,7 @@ def build_tools(rag: Rag) -> list[BaseTool]:
             event("tool_error", logging.WARNING, tool="search_docs", error=type(exc).__name__)
             event("retrieval_unavailable", logging.WARNING)
             tool_calls_total.labels("search_docs", "error").inc()
-            # Raising is what makes ok=false reach the client: LangGraph sets status="error" only
-            # when a tool raises. ToolNode keeps it inside the graph, so /chat survives Qdrant down.
+            # LangGraph sets status="error" only when a tool raises, and ok=false rides on that.
             raise ToolException("Knowledge base unavailable") from exc
         tool_calls_total.labels("search_docs", "ok").inc()
         if not hits:

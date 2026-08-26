@@ -43,8 +43,7 @@ def setup_logging() -> None:
     root.setLevel(settings.log_level)
 
 
-# Never pass message content, tool arguments or document text as fields: these lines are shipped
-# to Loki and kept. Lengths and counts only.
+# Lengths and counts only. These lines are shipped to Loki and kept.
 def event(name: str, level: int = logging.INFO, **fields) -> None:
     log.log(level, name, extra={"fields": fields})
 

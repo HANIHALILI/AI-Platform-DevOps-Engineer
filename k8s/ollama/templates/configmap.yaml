@@ -1,9 +1,5 @@
-{{- /*
-The Modelfile the init container builds `model.servedAs` from. Everything here
-comes from values, so tuning inference is a `helm upgrade` and not a template
-change; the checksum annotation on the Deployment rebuilds the model when it
-changes.
-*/}}
+{{- /* The Modelfile the init container builds `model.servedAs` from. The checksum
+     annotation on the Deployment rebuilds the model when this changes. */}}
 apiVersion: v1
 kind: ConfigMap
 metadata:

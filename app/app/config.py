@@ -21,9 +21,7 @@ class Settings(BaseSettings):
     max_iterations: int = Field(default=5, ge=1, le=10)
     log_level: str = "INFO"
 
-    # A key left empty in a Secret is a key that was not set, but pydantic hands
-    # it over as "" and the Qdrant client sends anything non-None as an api-key
-    # header — over plain HTTP, with a warning.
+    # An empty key in the Secret means unset. Anything non-None is sent as an api-key header.
     @field_validator("qdrant_key", mode="after")
     @classmethod
     def _blank_is_unset(cls, value: str | None) -> str | None:

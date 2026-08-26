@@ -4,7 +4,7 @@ A FastAPI service with a streaming `/chat` endpoint. A LangGraph agent decides w
 tools — a Qdrant document search and a clock. It runs on a local kind cluster with Ollama as the
 inference server and Qdrant as the vector store, one Helm chart each under `k8s/`.
 
-`app/SPEC.md` describes the service; `app/app/config.py` lists every setting it reads.
+`app/app/config.py` lists every setting the service reads.
 `k8s/ollama/README.md` covers the inference tier — the quantized model it serves, what is tunable,
 and how to measure it. `k8s/argocd/README.md` covers the GitOps flow.
 
@@ -114,7 +114,7 @@ cd app
 kubectl port-forward svc/qdrant 6333:6333 &
 kubectl port-forward svc/ollama 11434:11434 &
 AGENT_QDRANT_URL=http://localhost:6333 AGENT_EMBED_URL=http://localhost:11434 \
-  uv run python scripts/index.py --path ../docs
+  uv run python scripts/index.py --path /path/to/markdown
 ```
 
 ## Monitoring and logs

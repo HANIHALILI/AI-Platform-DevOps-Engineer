@@ -89,8 +89,7 @@ async def chat(body: ChatRequest, request: Request):
                 iterations=iterations,
             )
 
-    # X-Accel-Buffering is required: without it the nginx ingress buffers the response, and
-    # streaming works locally but breaks in the cluster.
+    # Without X-Accel-Buffering the nginx ingress buffers the stream and only the cluster breaks.
     return StreamingResponse(
         stream(),
         media_type="text/event-stream",
@@ -111,13 +110,13 @@ async def documents(file: UploadFile, request: Request):
     return {"file": file.filename, "chunks": chunks}
 
 
-# Liveness must not touch external services, or a slow model load becomes CrashLoopBackOff.
+# No I/O here, or a slow model load becomes CrashLoopBackOff.
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
 
 
-# Qdrant is reported but does not gate readiness, because search_docs degrades gracefully.
+# Qdrant is reported but does not gate readiness: search_docs degrades gracefully.
 @app.get("/readyz")
 async def readyz(request: Request):
     try:

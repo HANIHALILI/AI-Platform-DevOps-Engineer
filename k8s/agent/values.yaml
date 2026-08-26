@@ -5,11 +5,10 @@
 replicaCount: 2
 
 image:
-  # The same reference pushed from the host; resolved in-cluster through the
-  # containerd mirror on each node, so no imagePullSecrets are needed.
+  # The reference pushed from the host, resolved in-cluster through the containerd
+  # mirror on each node, so no imagePullSecrets are needed.
   repository: localhost:5001/agent
-  # Empty => Chart.appVersion. `dev` is a moving tag, which is why pullPolicy
-  # below is Always.
+  # The commit that last touched app/. `make release` writes this line.
   tag: 155548c
   pullPolicy: Always
 
@@ -22,60 +21,47 @@ serviceAccount:
   create: true
   name: ""
   annotations: {}
-  # The Agent service never calls the Kubernetes API, so it gets no token to
-  # steal. Set true only if the workload starts talking to the API server.
+  # The service never calls the Kubernetes API, so it gets no token to steal.
   automountServiceAccountToken: false
 
 podAnnotations: {}
 podLabels: {}
 
 service:
-  # The agent is the only piece of the stack meant to be called from outside;
-  # Ollama and Qdrant stay ClusterIP. 30080 is the port k8s/kind-config.yaml
-  # maps to host :8080, so the service answers on http://localhost:8080.
+  # The only piece of the stack called from outside; Ollama and Qdrant stay ClusterIP.
+  # k8s/kind-config.yaml maps 30080 to host :8080.
   type: NodePort
   port: 80
-  # Named port on the container; see `containerPort` below.
   targetPort: http
-  # Only used when type is NodePort.
   nodePort: 30080
   annotations: {}
 
 containerPort: 8000
 
-# Non-secret configuration, rendered into a ConfigMap and consumed with
-# `envFrom`. app/app/config.py reads every setting from the environment with
-# env_prefix="AGENT_"; anything left out here keeps the default it declares.
-# Changing any value rolls the Pods via the checksum annotation.
+# Rendered into a ConfigMap and consumed with `envFrom`. Anything left out keeps the
+# default app/app/config.py declares. A change here rolls the Pods via the checksum.
 config:
   AGENT_LOG_LEVEL: INFO
-  # The two dependencies, addressed by Service name in this namespace. They
-  # happen to equal the defaults in app/app/config.py, and are still spelled
-  # out: where the agent connects belongs in the cluster's configuration, not
-  # in the image. /v1 is the OpenAI-compatible API Ollama serves; the
-  # embeddings client uses Ollama's own API at the root.
+  # Spelled out even though they match the app defaults: where the agent connects
+  # belongs in the cluster's configuration, not in the image. /v1 is the
+  # OpenAI-compatible API; the embeddings client uses Ollama's own API at the root.
   AGENT_LLM_URL: http://ollama:11434/v1
   AGENT_EMBED_URL: http://ollama:11434
   AGENT_QDRANT_URL: http://qdrant:6333
-  # `model.servedAs` in k8s/ollama/values.yaml, not a base model name: Ollama
-  # builds that model from its Modelfile, so the weights and the quantization
-  # behind it change there without this value moving. AGENT_EMBED_MODEL is
-  # `embedModel` in the same file.
+  # `model.servedAs` in k8s/ollama/values.yaml, not a base model: the weights behind
+  # that name change there without this value moving.
   AGENT_LLM_MODEL: agent-llm
   AGENT_EMBED_MODEL: all-minilm
 
-# Rendered into a Secret (stringData) with the same envFrom treatment as
-# `config` above. The values below are the placeholders this local stack runs
-# on; real credentials are passed at install time and never committed:
+# Rendered into a Secret, same envFrom treatment as `config`. Placeholders for this
+# local stack; real credentials are passed at install time:
 #
 #   helm upgrade --install agent k8s/agent \
 #     --set-string secrets.AGENT_QDRANT_KEY="$QDRANT_KEY"
 secrets:
-  # Ollama does not authenticate, but the OpenAI client refuses to start
-  # without a key, so the app's own default is carried here explicitly.
+  # Ollama does not authenticate, but the OpenAI client refuses to start without a key.
   AGENT_LLM_KEY: not-needed
-  # Empty because Qdrant runs unauthenticated here. app/app/config.py reads an
-  # empty value as "no key" rather than sending a blank api-key header.
+  # Qdrant runs unauthenticated here; config.py reads empty as "no key".
   AGENT_QDRANT_KEY: ""
 
 extraEnv: []
@@ -112,8 +98,7 @@ containerSecurityContext:
   capabilities:
     drop: ["ALL"]
 
-# /healthz touches no external service by design: an LLM outage must never
-# restart-loop every replica.
+# /healthz touches no external service, or an LLM outage restart-loops every replica.
 livenessProbe:
   httpGet:
     path: /healthz
@@ -123,9 +108,8 @@ livenessProbe:
   timeoutSeconds: 2
   failureThreshold: 3
 
-# /readyz returns 503 while the LLM is unreachable, so a replica that cannot
-# serve leaves the Service endpoints instead of restarting. timeoutSeconds
-# exceeds the app's own 5s READY_TIMEOUT.
+# /readyz returns 503 while the LLM is unreachable, so a replica that cannot serve
+# leaves the endpoints instead of restarting. timeoutSeconds exceeds READY_TIMEOUT.
 readinessProbe:
   httpGet:
     path: /readyz
@@ -148,8 +132,7 @@ nodeSelector:
 tolerations: []
 affinity: {}
 
-# One Pod per node. With DoNotSchedule this is what proves the multi-node
-# cluster is real: if the replicas could not be spread they stay Pending
+# One Pod per node. With DoNotSchedule, replicas that cannot spread stay Pending
 # instead of quietly co-locating.
 topologySpread:
   enabled: true
@@ -157,8 +140,7 @@ topologySpread:
   topologyKey: kubernetes.io/hostname
   whenUnsatisfiable: DoNotSchedule
 
-# maxSurge stays 0: with topologySpread on DoNotSchedule a surge Pod has no node
-# left to land on and the rollout deadlocks in Pending.
+# maxSurge 0: with topologySpread on DoNotSchedule a surge Pod has no node to land on.
 updateStrategy:
   type: RollingUpdate
   rollingUpdate:

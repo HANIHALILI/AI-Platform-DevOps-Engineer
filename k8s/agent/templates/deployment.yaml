@@ -26,11 +26,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
-        {{- /*
-        Rolls the Pods whenever the ConfigMap content changes. Without this, a
-        `helm upgrade` that only touches config updates the ConfigMap and leaves
-        every Pod running the previous values.
-        */}}
+        {{- /* Without this a config-only `helm upgrade` leaves every Pod on the old values. */}}
         {{- if .Values.config }}
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         {{- end }}

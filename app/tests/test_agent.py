@@ -33,8 +33,7 @@ async def test_tool_error_becomes_ok_false():
 
 
 async def test_tool_update_without_status_raises():
-    # The reason the events are models: a LangChain version that stops setting `status` must fail
-    # loudly here instead of marking every failure a success.
+    # Why the events are models: a version that stops setting `status` has to fail loudly.
     class NoStatus:
         name = "get_time"
         content = "boom"
@@ -63,7 +62,7 @@ async def test_search_docs_raises_tool_exception_and_stream_still_completes():
     with pytest.raises(ToolException):
         await search_docs.ainvoke({"query": "x"})
 
-    # ToolNode turns that into an error ToolMessage, so the stream still reaches its terminal event.
+    # ToolNode turns that into an error ToolMessage, and the stream still terminates.
     msg = ToolMessage(
         content="Knowledge base unavailable", name="search_docs", tool_call_id="1", status="error"
     )

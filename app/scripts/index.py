@@ -10,7 +10,7 @@ from app.rag import Rag
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Rebuild the Qdrant collection.")
-    # Required, so a rebuild is never run against a directory by accident.
+    # Required: a rebuild drops the collection, so it must not pick up a default.
     parser.add_argument("--path", required=True, type=Path)
     args = parser.parse_args()
 

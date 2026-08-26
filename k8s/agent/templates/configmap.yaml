@@ -1,9 +1,5 @@
 {{- if .Values.config }}
-{{- /*
-Non-secret configuration only. The Agent service reads everything from the
-environment (app/config.py), so these land as env vars via `envFrom`.
-Secrets belong in a Secret referenced through `extraEnvFrom`.
-*/}}
+{{- /* Non-secret configuration only; `secrets` renders into the Secret next to this. */}}
 apiVersion: v1
 kind: ConfigMap
 metadata:

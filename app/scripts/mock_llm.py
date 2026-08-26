@@ -42,7 +42,7 @@ async def _tool_call(name: str, args: dict):
         {"tool_calls": [{"index": 0, "id": f"call_{uuid.uuid4().hex[:8]}", "type": "function",
                          "function": {"name": name, "arguments": ""}}]}
     )
-    # Real servers dribble arguments out in fragments; do the same so the client side is exercised.
+    # Real servers dribble arguments out in fragments.
     for part in _split(json.dumps(args), ARG_CHUNKS):
         await asyncio.sleep(ARG_DELAY)
         yield _frame({"tool_calls": [{"index": 0, "function": {"arguments": part}}]})
@@ -66,7 +66,7 @@ def _plan(messages: list[dict]) -> tuple[str, dict] | str:
     if "loop" in text:
         return "get_time", {"timezone": "UTC"}  # never settles: exercises the recursion limit
     if answered:
-        return "Done — here is the answer based on the tool result."
+        return "Done. Here is the answer based on the tool result."
     if "badtz" in text:
         return "get_time", {"timezone": "Mars/Olympus"}
     if "time" in text:

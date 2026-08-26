@@ -1,19 +1,15 @@
-# The directory name must match `name` — `helm lint` treats a mismatch as an
-# error — so this chart lives at k8s/qdrant/.
 apiVersion: v2
 name: qdrant
-description: The Vector DB — the official Qdrant chart with this project's defaults
+description: The vector DB, the official Qdrant chart with this project's defaults
 type: application
 
-# Chart version: bumped when the values below change.
 version: 0.1.0
 appVersion: "1.19.0"
 
 kubeVersion: ">=1.27.0-0"
 
-# The upstream chart, unmodified. Keeping it as a dependency rather than a copy
-# means a version bump is this line plus `helm dependency update`, and the
-# overrides in values.yaml stay visible instead of buried in a fork.
+# A dependency and not a fork: a version bump is this line plus `helm dependency
+# update`, and the overrides in values.yaml stay visible.
 dependencies:
   - name: qdrant
     version: "1.19.0"

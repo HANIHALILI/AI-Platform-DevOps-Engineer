@@ -1,14 +1,13 @@
 # Argo CD
 
-`make gitops` installs Argo CD and creates one Application per chart — Qdrant,
-Ollama, the Agent, and monitoring. Each watches `main`, syncs automatically, and
-prunes and self-heals, so a change to a chart or its values reaches the cluster
-on its own and a manual `kubectl edit` is undone.
+`make gitops` installs Argo CD and creates one Application per chart: Qdrant, Ollama,
+the Agent, and monitoring. Each watches `main`, syncs automatically, and prunes and
+self-heals, so a change to a chart or its values reaches the cluster on its own and a
+manual `kubectl edit` is undone.
 
-Monitoring syncs with `ServerSideApply=true`, because the Prometheus CRDs are
-too big for the apply annotation, and renders from the `Chart.lock` and the
-vendored `charts/*.tgz` committed under `k8s/observability`, so its three
-upstream charts cannot move without a commit.
+Monitoring syncs with `ServerSideApply=true`, because the Prometheus CRDs are too
+big for the apply annotation. Its three upstream charts are pinned to exact versions
+in `k8s/observability/Chart.yaml`, so none of them can move without a commit.
 
 The version is pinned in `Makefile` with `ARGOCD_VERSION`; override it for an
 intentional upgrade, for example `make gitops ARGOCD_VERSION=v3.4.7`.

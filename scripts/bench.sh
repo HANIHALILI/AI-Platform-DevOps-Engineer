@@ -6,14 +6,8 @@
 #   RUNS        sequential measured requests  (default 3)
 #   PARALLEL    simultaneous requests         (default 4)
 #
-# The prompt and the generation options are fixed on purpose: two runs are only
-# comparable if they asked the model for the same work. Every duration Ollama
-# reports is in nanoseconds; every one printed here is in seconds.
-#
-# TTFT is measured, not derived: the requests it comes from are streamed, the
-# clock is the client's, and it stops on the first chunk carrying generated
-# text. Ollama's own load_duration and prompt_eval_duration are reported beside
-# it as the server-side components of that wait, not as a substitute for it.
+# The prompt and the options are fixed: two runs only compare if they asked for the
+# same work. Ollama reports nanoseconds, everything printed here is seconds.
 set -euo pipefail
 
 NS=${NAMESPACE:-ai-platform}
@@ -26,8 +20,7 @@ OPTIONS='{"num_predict":256,"temperature":0,"seed":42}'
 
 fail() { echo "FAILED: $1" >&2; exit 1; }
 
-# TTFT is timed with the EPOCHREALTIME builtin. Without it the number reported
-# would silently be zero rather than a measurement, so refuse instead.
+# Without EPOCHREALTIME the TTFT below is silently zero rather than a measurement.
 [ -n "${EPOCHREALTIME:-}" ] || fail "bash 5 or newer is required to measure TTFT"
 
 POD=$(kubectl -n "$NS" get pod -l app=ollama -o jsonpath='{.items[0].metadata.name}')
@@ -51,30 +44,25 @@ done
 curl -sf --max-time 10 "$API/api/show" -d "{\"model\":\"$MODEL\"}" >/dev/null \
   || fail "$MODEL did not answer through the port-forward to $POD"
 
-# Not streamed. Used only where the whole response is what matters and no TTFT
-# is wanted, which is the aggregate run at the end.
+# Not streamed: used only by the aggregate run, which wants the whole response.
 generate() {
   curl -sS --max-time 900 "$API/api/generate" -H 'Content-Type: application/json' \
     -d "{\"model\":\"$MODEL\",\"prompt\":\"$PROMPT\",\"stream\":false,\"options\":$OPTIONS}"
 }
 
-# Streamed, which is what makes a real TTFT possible. Prints two lines: the
-# client-observed TTFT in nanoseconds, then that same request's summary object —
-# so the TTFT and the tokens/sec read off the summary describe one generation
-# and not two. The clock starts before curl is handed the request and stops on
-# the first chunk that carries generated text, so it includes the client, the
-# port-forward and the network.
+# Prints the client-observed TTFT in nanoseconds, then that same request's summary,
+# so the TTFT and the tokens/sec read off it describe one generation and not two.
+# The clock starts before curl is handed the request, so it carries the port-forward
+# and the network too.
 stream() {
   local began first summary chunk
   began=${EPOCHREALTIME/[.,]/}
   first= summary=
-  # Process substitution keeps the reader, its first-token clock and the
-  # arithmetic in this shell. A pipeline runs the loop in a subshell on Bash,
-  # which made Qwen3's thinking chunks incorrectly produce a zero TTFT.
+  # Process substitution, not a pipeline: a pipeline runs the loop in a subshell and
+  # loses the clock set inside it.
   while IFS= read -r chunk; do
-    # Qwen3 can stream reasoning in "thinking" before it streams an answer in
-    # "response". Both are generated text. The empty response-only chunks and
-    # the final summary must not stop the clock.
+    # Qwen3 streams reasoning in "thinking" before an answer in "response". Both are
+    # generated text; the empty chunks and the final summary are not.
     case $chunk in
       *'"thinking":"'*|*'"response":"'*) [ -n "$first" ] || first=${EPOCHREALTIME/[.,]/} ;;
       *'"thinking":""'|*'"response":""'*) ;;
@@ -83,16 +71,12 @@ stream() {
   done < <(curl -sS --no-buffer --max-time 900 "$API/api/generate" \
     -H 'Content-Type: application/json' \
     -d "{\"model\":\"$MODEL\",\"prompt\":\"$PROMPT\",\"stream\":true,\"options\":$OPTIONS}")
-  # EPOCHREALTIME is a builtin, and dropping the separator leaves whole
-  # microseconds — so taking a timestamp costs no fork, and the arithmetic can
-  # wait until the stream is over.
+  # A builtin with the separator dropped: whole microseconds, and no fork per timestamp.
   echo "$(( first ? (first - began) * 1000 : 0 ))"
   echo "$summary"
 }
 
-# Empty, not a failure, when the field is absent: a request that timed out or
-# came back an error has no eval_count, and that must not take the run down
-# without saying why.
+# Empty and not a failure when the field is absent: a timed-out request has no eval_count.
 num()  { grep -oE "\"$2\": *[0-9]+" <<<"$1" | head -1 | sed 's/.*[: ]//' || true; }
 secs() { awk -v n="$1" 'BEGIN { printf "%.2f", n/1e9 }'; }
 
@@ -107,9 +91,7 @@ kubectl -n "$NS" get deploy ollama -o jsonpath='limits: {.spec.template.spec.con
 
 echo
 echo "== startup"
-# The init container pulls the weights and builds the served model; the server
-# only starts once it exits. A first ever start includes the download and a
-# later one reads the PVC, so the two are not comparable.
+# A first ever start includes the download, a later one reads the PVC. Not comparable.
 started=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.initContainerStatuses[0].state.terminated.startedAt}')
 finished=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.initContainerStatuses[0].state.terminated.finishedAt}')
 scheduled=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.startTime}')
@@ -151,10 +133,8 @@ for i in $(seq "$RUNS"); do
   echo "run $i               TTFT $(secs "${out%%$'\n'*}") s   $count tok   $rate tok/s"
 done
 awk -v s="$sum" -v n="$RUNS" 'BEGIN { printf "mean                 %.2f tok/s\n", s/n }'
-# Both numbers on a run line come from the one request: the TTFT off the client's
-# clock, the rate off eval_count/eval_duration in that request's own summary.
-# eval_count falls short of num_predict whenever the model stops on its own, so
-# runs compare on tok/s and not on wall time.
+# eval_count falls short of num_predict when the model stops on its own, so runs
+# compare on tok/s and not on wall time.
 
 echo
 echo "== aggregate throughput ($PARALLEL at once)"
@@ -164,8 +144,7 @@ for i in $(seq "$PARALLEL"); do
   generate > "$TMP/p$i" &
   pids="$pids $!"
 done
-# These PIDs and not a bare `wait`: the port-forward is a background job too and
-# it never exits.
+# These PIDs and not a bare `wait`: the port-forward never exits.
 wait $pids
 wall=$(awk -v a="$began" -v b="$(date +%s%N)" 'BEGIN { printf "%.2f", (b-a)/1e9 }')
 tokens=$(for i in $(seq "$PARALLEL"); do num "$(cat "$TMP/p$i")" eval_count; done | awk '{ s += $1 } END { print s+0 }')

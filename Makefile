@@ -57,16 +57,16 @@ registry:
 	curl -fsS --retry 10 --retry-delay 2 --retry-connrefused \
 	  http://localhost:$(REGISTRY_PORT)/v2/_catalog >/dev/null
 
-# No --image, so kind uses the node image it built itself: the image and the
-# installed kind can never drift apart. The Kubernetes version then follows
-# whoever's kind is installed, and helm enforces the chart's kubeVersion floor.
+# No --image: kind uses the node image it shipped with, so the two cannot drift.
+# The Kubernetes version follows whoever's kind is installed, and helm enforces
+# the chart's kubeVersion floor.
 cluster:
 	@kind get clusters 2>/dev/null | grep -qx $(CLUSTER_NAME) || \
 	  kind create cluster --name $(CLUSTER_NAME) --config $(KIND_CONFIG) --wait 180s
 	kubectl config use-context kind-$(CLUSTER_NAME) >/dev/null
 
-	# kind-config.yaml points containerd at /etc/containerd/certs.d; this is the
-	# entry that makes localhost:5001/agent resolve to the registry container.
+	# kind-config.yaml points containerd at /etc/containerd/certs.d. This is the entry
+	# that makes localhost:5001/agent resolve to the registry container.
 	for node in $$(kind get nodes --name $(CLUSTER_NAME)); do
 	  docker exec "$$node" mkdir -p /etc/containerd/certs.d/localhost:$(REGISTRY_PORT)
 	  echo '[host."http://$(REGISTRY_NAME):5000"]' | \
@@ -75,8 +75,8 @@ cluster:
 	docker network connect kind $(REGISTRY_NAME) 2>/dev/null || true
 	kubectl wait --for=condition=Ready nodes --all --timeout=180s
 
-	# The HPA needs metrics-server, and kind's kubelets serve their metrics with
-	# self-signed certs that it rejects unless told not to.
+	# The HPA needs metrics-server, and kind's kubelets serve metrics with self-signed
+	# certs it rejects unless told not to.
 	kubectl apply -f "https://github.com/kubernetes-sigs/metrics-server/releases/download/$(METRICS_SERVER_VERSION)/components.yaml" >/dev/null
 	kubectl -n kube-system get deploy metrics-server -o jsonpath='{..args}' | grep -q insecure-tls || \
 	  kubectl -n kube-system patch deployment metrics-server --type=json \
@@ -100,8 +100,8 @@ deploy-qdrant:
 	@ls k8s/qdrant/charts/*.tgz >/dev/null 2>&1 || helm dependency build k8s/qdrant
 	helm upgrade --install qdrant k8s/qdrant -n $(NAMESPACE) --create-namespace
 
-# The first install pulls ~2GB of models in an init container, so this one takes
-# several minutes to report Ready. Later installs hit the cached volume.
+# The first install pulls the models in an init container and takes minutes to report
+# Ready. Later ones hit the cached volume.
 deploy-ollama:
 	@helm upgrade --install ollama k8s/ollama -n $(NAMESPACE) --create-namespace
 
@@ -126,9 +126,8 @@ install-argocd:
 gitops: install-argocd
 	sed 's|targetRevision: main|targetRevision: $(GITOPS_BRANCH)|g' k8s/argocd/applications.yaml | kubectl apply -f -
 
-# A release always comes from $(GITOPS_BRANCH), whatever is checked out here:
-# the image is built in a throwaway worktree of it, and the tag that Argo CD
-# reads is committed onto it.
+# A release always comes from $(GITOPS_BRANCH), whatever is checked out here: it is
+# built in a throwaway worktree of that branch and the tag is committed onto it.
 release:
 	git fetch -q origin $(GITOPS_BRANCH)
 	work=$$(mktemp -d)

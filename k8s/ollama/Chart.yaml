@@ -1,17 +1,13 @@
-# The directory name must match `name` — `helm lint` treats a mismatch as an
-# error — so this chart lives at k8s/ollama/.
 apiVersion: v2
 name: ollama
-description: Ollama — the Inference Server the Agent service talks to
+description: The inference server the Agent service talks to
 type: application
 
-# Chart version: bumped when the templates change.
 version: 0.1.0
-# Application version: the default image tag is derived from this unless
-# image.tag is set explicitly.
+# The fallback for an empty image.tag.
 appVersion: "0.32.15"
 
-# Matches the floor the agent chart sets, so both charts target one cluster.
+# Matches the floor the agent chart sets.
 kubeVersion: ">=1.27.0-0"
 
 keywords:

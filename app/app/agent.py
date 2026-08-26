@@ -23,8 +23,7 @@ SYSTEM_PROMPT = """You are a helpful assistant running inside a Kubernetes clust
 - Be concise."""
 
 
-# No checkpointer: the service is stateless, and a MemorySaver would put conversation state in pod
-# memory and break horizontal scaling.
+# No checkpointer: a MemorySaver would put conversation state in pod memory and break scaling.
 def build_agent(tools: list[BaseTool]):
     llm = ChatOpenAI(
         base_url=settings.llm_url,
@@ -34,17 +33,14 @@ def build_agent(tools: list[BaseTool]):
         timeout=LLM_TIMEOUT,
         max_retries=2,
     )
-    # ToolNode's default handler re-raises ToolException; handling it keeps the failure inside the
-    # graph as a ToolMessage with status="error", so /chat still answers with Qdrant down.
-    # `str` rather than True: True wraps the message in a template around repr(exc), which would
-    # put "ToolException(...)" in front of both the model and the client's preview.
+    # Keeps a ToolException inside the graph as a ToolMessage with status="error", so /chat still
+    # answers with Qdrant down. `str` and not True, which would wrap it in repr(exc).
     node = ToolNode(tools, handle_tool_errors=str)
     return create_react_agent(llm, tools=node, prompt=SYSTEM_PROMPT)
 
 
-# The event contract is ours, not LangChain's. `ok: bool` and `name: str` are required so that a
-# LangChain version that stops setting `status` blows up here instead of quietly marking every
-# failed tool call a success.
+# Our contract, not LangChain's. The required fields make a version that stops setting `status`
+# fail here instead of marking every failed tool call a success.
 class Token(BaseModel):
     type: Literal["token"] = "token"
     content: str
@@ -98,9 +94,8 @@ async def run(agent, message: str) -> AsyncIterator[str]:
         ):
             if mode == "messages":
                 chunk, _meta = payload
-                # "messages" carries every node's messages, tool output included, so tokens are
-                # taken from model chunks only. Chunks carrying tool-call fragments have empty
-                # content; emitting those would leak empty token events into the stream.
+                # "messages" carries every node's output, and tool-call fragments arrive as
+                # empty-content chunks, so only non-empty model chunks are tokens.
                 if isinstance(chunk, AIMessageChunk) and isinstance(chunk.content, str) and chunk.content:
                     streamed += 1
                     yield sse(Token(content=chunk.content))
@@ -111,9 +106,8 @@ async def run(agent, message: str) -> AsyncIterator[str]:
                     for msg in update["messages"]:
                         for call in msg.tool_calls:
                             yield sse(ToolCall(name=call["name"], args=call["args"]))
-                        # Once the step budget runs out the prebuilt agent injects a canned
-                        # message instead of raising, so that turn ends with neither tool calls
-                        # nor streamed text. Without this the client just sees the stream stop.
+                        # Out of budget, the prebuilt agent injects a canned message instead of
+                        # raising, so the turn ends with neither tool calls nor streamed text.
                         cut_off = (
                             iterations >= settings.max_iterations
                             and not msg.tool_calls
@@ -131,5 +125,4 @@ async def run(agent, message: str) -> AsyncIterator[str]:
                         )
     except GraphRecursionError:
         cut_off = True
-    # One terminal event, always.
     yield sse(Error(message="iteration limit reached") if cut_off else Done(iterations=iterations))

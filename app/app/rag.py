@@ -51,8 +51,7 @@ class Rag:
             )
         return self._store
 
-    # Additive, unlike rebuild: afrom_documents creates the collection when it does not exist yet
-    # and appends to it when it does.
+    # Additive, unlike rebuild: creates the collection if missing, appends to it otherwise.
     async def ingest(self, name: str, text: str) -> int:
         chunks = _splitter().create_documents([text], metadatas=[{"source": name}])
         if not chunks:
@@ -78,14 +77,13 @@ class Rag:
         except Exception as exc:
             status = "error"
             if isinstance(exc, UnexpectedResponse) and exc.status_code == 404:
-                event("collection missing — run scripts/index.py", logging.WARNING)
+                event("collection missing, run scripts/index.py", logging.WARNING)
             raise RagUnavailable(type(exc).__name__) from exc
         finally:
             qdrant_search_seconds.labels(status).observe(time.perf_counter() - started)
         return [Hit(doc.page_content, doc.metadata["source"], score) for doc, score in results]
 
-    # force_recreate gives full-rebuild semantics in one keyword: no incremental path, and stale
-    # chunks from edited files cannot survive. Exceptions propagate — a seeding job fails loudly.
+    # force_recreate: no incremental path, so stale chunks from edited files cannot survive.
     async def rebuild(self, path: Path) -> tuple[int, int]:
         def load():
             files = sorted(path.rglob("*.md"))

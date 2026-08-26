@@ -65,12 +65,10 @@ BASE=$(kubectl -n "$NS" get deploy ollama \
 SERVED=$(kubectl -n "$NS" get deploy ollama \
   -o jsonpath='{.spec.template.spec.initContainers[0].env[?(@.name=="SERVED")].value}')
 
-# An empty BASE would leave the quantization pattern below matching any line that
-# says "quantization", so the assertion has to fail here instead of passing.
+# An empty BASE leaves the pattern below matching any line that says "quantization".
 test -n "$BASE" || fail "the ollama Deployment has no BASE_MODEL environment variable"
 
-# `ollama show` proves agent-llm was built, and reports the quantization the
-# weights carry, which has to be the one the tag asked for.
+# `ollama show` proves agent-llm was built and reports the quantization it carries.
 SHOW=$(kubectl -n "$NS" exec deploy/ollama -- ollama show "$SERVED") \
   || fail "$SERVED was not built from the Modelfile"
 grep -qi "quantization.*${BASE##*-}" <<<"$SHOW" \
