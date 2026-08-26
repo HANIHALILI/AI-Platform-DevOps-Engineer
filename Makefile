@@ -27,7 +27,7 @@ NAMESPACE      ?= ai-platform
 	install-argocd gitops release all smoke bench quality down clean
 
 help:
-	@echo "make deps     check that docker, kind, kubectl and helm are installed"
+	@echo "make deps     check that docker, kind, kubectl, helm and jq are installed"
 	echo "make up       local registry + 3-node cluster"
 	echo "make build    build $(IMAGE):$(IMAGE_TAG)"
 	echo "make push     push it to the local registry"
@@ -42,7 +42,7 @@ help:
 	echo "make clean    delete the cluster and the registry"
 
 deps:
-	@for tool in docker kind kubectl helm; do
+	@for tool in docker kind kubectl helm jq; do
 	  command -v "$$tool" >/dev/null || { echo "$$tool is not installed" >&2; exit 1; }
 	done
 	docker info >/dev/null 2>&1 || { echo "docker is not running" >&2; exit 1; }

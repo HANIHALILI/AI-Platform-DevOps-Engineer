@@ -23,8 +23,8 @@ limit — then health, readiness and metrics. `uv run pytest` runs the unit test
 
 ## On kind
 
-The Makefile needs Linux. Docker, kind, kubectl and helm
-have to be on your PATH — `make deps` checks for all four and names whatever is missing.
+The Makefile needs Linux. Docker, kind, kubectl, helm and jq have to be on your PATH — `make deps`
+checks for all five and names whatever is missing.
 
 ```sh
 make up      # local registry, 3-node cluster, metrics-server
