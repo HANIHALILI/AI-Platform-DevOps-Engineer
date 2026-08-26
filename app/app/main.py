@@ -61,6 +61,8 @@ async def chat(body: ChatRequest, request: Request):
         ttft = None
         iterations = 0
         status = "ok"
+        # Stays incomplete unless the agent reaches a terminal event of its own.
+        finish_reason = "incomplete"
         try:
             async for chunk in run(request.app.state.agent, body.message):
                 if await request.is_disconnected():
@@ -72,6 +74,8 @@ async def chat(body: ChatRequest, request: Request):
                     chat_ttft_seconds.observe(ttft)
                 elif payload["type"] in ("done", "error"):
                     iterations = payload["iterations"]
+                    # run() emits a terminal error for one reason: the step budget ran out.
+                    finish_reason = "answered" if payload["type"] == "done" else "iteration_limit"
                 yield chunk
         except Exception as exc:
             status = "error"
@@ -80,10 +84,11 @@ async def chat(body: ChatRequest, request: Request):
         finally:
             duration = time.perf_counter() - started
             chat_duration_seconds.observe(duration)
-            chat_requests_total.labels(status).inc()
+            chat_requests_total.labels(status=status, finish_reason=finish_reason).inc()
             event(
                 "request_end",
                 status=status,
+                finish_reason=finish_reason,
                 duration_ms=round(duration * 1000),
                 ttft_ms=round(ttft * 1000) if ttft is not None else None,
                 iterations=iterations,

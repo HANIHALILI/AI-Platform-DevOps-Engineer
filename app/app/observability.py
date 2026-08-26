@@ -14,7 +14,11 @@ request_id: ContextVar[str] = ContextVar("request_id", default="-")
 
 log = logging.getLogger("agent")
 
-chat_requests_total = Counter("chat_requests_total", "Chat requests", ["status"])
+# status is how the request was served, finish_reason is how the agent's turn ended. They are
+# not two spellings of one thing: a client can disconnect from a stream that had already answered.
+chat_requests_total = Counter(
+    "chat_requests_total", "Chat requests", ["status", "finish_reason"]
+)
 chat_ttft_seconds = Histogram("chat_ttft_seconds", "Request received to first token event")
 chat_duration_seconds = Histogram("chat_duration_seconds", "Full chat request duration")
 tool_calls_total = Counter("tool_calls_total", "Tool invocations", ["tool", "status"])
