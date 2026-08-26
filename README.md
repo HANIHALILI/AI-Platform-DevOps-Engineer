@@ -85,8 +85,6 @@ To check the result, or to tear it down:
 
 ```sh
 make smoke     # deployment, security and monitoring checks
-make bench     # startup, memory, tokens/sec against the deployed Ollama
-make quality   # graded answers from the deployed model
 make down      # delete the cluster; make clean also drops the registry
 ```
 

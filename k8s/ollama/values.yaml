@@ -38,7 +38,7 @@ inference:
 server:
   # Requests decoded concurrently per model. Each holds its own context window, so
   # memory scales with this. One slot per CPU: the fourth took aggregate throughput
-  # from 14.34 to 20.98 tok/s (benchmarks/raw/).
+  # from 14.34 to 20.98 tok/s.
   numParallel: 4
   # The LLM and the embedding model, both resident.
   maxLoadedModels: 2
@@ -64,7 +64,7 @@ resources:
   requests:
     cpu: "1"
     # Room for the four 8192-token slots, so the scheduler cannot place competing
-    # memory-heavy work here. Measured at 9772Mi resident (benchmarks/results.md).
+    # memory-heavy work here. Measured at 9772Mi resident.
     memory: 20Gi
   limits:
     cpu: "4"

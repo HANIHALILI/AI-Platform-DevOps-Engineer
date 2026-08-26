@@ -24,7 +24,7 @@ NAMESPACE      ?= ai-platform
 
 .PHONY: help deps registry cluster up build push \
 	deploy deploy-qdrant deploy-ollama deploy-agent deploy-monitoring \
-	install-argocd gitops release all smoke bench quality down clean
+	install-argocd gitops release all smoke down clean
 
 help:
 	@echo "make deps     check that docker, kind, kubectl, helm and jq are installed"
@@ -36,8 +36,6 @@ help:
 	echo "make release  push the image and record its tag in git for Argo CD"
 	echo "make all      up + release + gitops"
 	echo "make smoke    end-to-end checks"
-	echo "make bench    measure the inference tier"
-	echo "make quality  run rubric-based quality checks against Ollama"
 	echo "make down     delete the cluster"
 	echo "make clean    delete the cluster and the registry"
 
@@ -144,12 +142,6 @@ all: up release gitops
 
 smoke:
 	@NAMESPACE=$(NAMESPACE) bash scripts/smoke.sh
-
-bench:
-	@NAMESPACE=$(NAMESPACE) bash scripts/bench.sh
-
-quality:
-	@NAMESPACE=$(NAMESPACE) bash scripts/quality.sh
 
 down:
 	-kind delete cluster --name $(CLUSTER_NAME)
