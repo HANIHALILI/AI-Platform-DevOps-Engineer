@@ -10,7 +10,7 @@ data:
       "annotations":{"list":[]},
       "editable":true,
       "panels":[
-        {"type":"timeseries","title":"Chat request rate","targets":[{"expr":"sum(rate(chat_requests_total[5m]))","legendFormat":"requests/s"}],"gridPos":{"h":8,"w":12,"x":0,"y":0}},
+        {"type":"timeseries","title":"Chat request rate by status","targets":[{"expr":"sum by (status) (rate(chat_requests_total[5m]))","legendFormat":"{{ "{{status}}" }}"}],"gridPos":{"h":8,"w":12,"x":0,"y":0}},
         {"type":"timeseries","title":"Streaming latency (p95)","targets":[{"expr":"histogram_quantile(0.95, sum(rate(chat_ttft_seconds_bucket[5m])) by (le))","legendFormat":"TTFT"},{"expr":"histogram_quantile(0.95, sum(rate(chat_duration_seconds_bucket[5m])) by (le))","legendFormat":"full response"}],"gridPos":{"h":8,"w":12,"x":12,"y":0}},
         {"type":"timeseries","title":"Pod CPU usage","targets":[{"expr":"sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"{{ .Release.Namespace }}\",container!=\"\",image!=\"\"}[5m]))","legendFormat":"{{ "{{pod}}" }}"}],"gridPos":{"h":8,"w":12,"x":0,"y":8}},
         {"type":"timeseries","title":"Pod memory working set","targets":[{"expr":"sum by (pod) (container_memory_working_set_bytes{namespace=\"{{ .Release.Namespace }}\",container!=\"\",image!=\"\"})","legendFormat":"{{ "{{pod}}" }}"}],"gridPos":{"h":8,"w":12,"x":12,"y":8}},
