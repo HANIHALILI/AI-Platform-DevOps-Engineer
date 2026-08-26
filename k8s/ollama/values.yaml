@@ -12,7 +12,7 @@ fullnameOverride: ""
 model:
   repository: qwen3
   variant: 4b
-  quantization: q4_K_M
+  quantization: q8_0
   servedAs: agent-llm
 
 # Embeddings, pulled as-is. all-minilm ships one 45MB build, so no quantization
@@ -64,7 +64,7 @@ resources:
   requests:
     cpu: "1"
     # Room for the four 8192-token slots, so the scheduler cannot place competing
-    # memory-heavy work here. Measured at 7.6Gi resident (benchmarks/results.md).
+    # memory-heavy work here. Measured at 9772Mi resident (benchmarks/results.md).
     memory: 20Gi
   limits:
     cpu: "4"

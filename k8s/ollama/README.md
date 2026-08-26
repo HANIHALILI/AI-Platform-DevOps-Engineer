@@ -1,7 +1,7 @@
 # Inference tier
 
 ```
-agent  --HTTP-->  ollama  -->  agent-llm  -->  qwen3:4b-q4_K_M  -->  CPU
+agent  --HTTP-->  ollama  -->  agent-llm  -->  qwen3:4b-q8_0  -->  CPU
                               (Modelfile)      (quantized GGUF weights)
 ```
 
@@ -46,17 +46,33 @@ model:
 The three fields compose into the tag Ollama pulls, `qwen2.5:7b-instruct-q4_K_M`. Any tag that
 exists on ollama.com works; check `ollama.com/library/<repository>/tags` first, because a variant
 and a quantization that do not pair leave the init container retrying a pull that cannot succeed.
-Raise `resources` to match, since a 7B at q4_K_M is roughly 4.4GB of weights against 2.5GB for the
-4B served here, and move `inference.numThread` with `resources.limits.cpu` if you change it.
+Raise `resources` to match: weights scale with the parameter count, and the table below gives the
+multiplier each quantization costs. Move `inference.numThread` with `resources.limits.cpu` too.
 
 Retuning is the same edit against `inference`, and costs no download: the checksum annotation rolls
 the Pod, and the init container rebuilds `agent-llm` from weights already on the volume.
 
 ## Quantization
 
-`Q4_K_M` is a llama.cpp K-quant. Weights are stored in blocks with their own scale at roughly four
-bits each, and the tensors that suffer most under compression, attention `wv` and the `w2`
-projections, are kept at six. The `M` is that medium mix.
+### Measured selection
+
+The deployed profile is `qwen3:4b-q8_0`, with 4 CPU threads, 4 parallel
+requests, an 8192-token context and a 20 GiB request / 24 GiB limit. Under the
+fixed benchmark it reached 26.81 aggregate tok/s and 9772 MiB RSS. The directly
+measured `q4_K_M` profile reached 20.98 aggregate tok/s and 7560 MiB RSS. In
+exchange for the 2.16 GiB higher resident footprint, `q8_0` adds 1.65 s to cold
+TTFT (7.89 s vs 6.24 s) but yields 27.8% more aggregate throughput. It also
+retains more weight precision than a 4-bit quantization, which is the expected
+direction for text quality; task-quality evaluation remains workload-specific.
+
+The selected profile has roughly 14 GiB of headroom below its 24 GiB limit. If
+memory density or cold-start latency is more important than throughput and
+precision, switch `model.quantization` back to `q4_K_M`.
+
+`q8_0` stores each weight as an 8-bit integer, in blocks with one scale apiece, which is close to a
+straight cast of the fp16 tensors. `q4_K_M` is a llama.cpp K-quant instead: roughly four bits per
+weight, with the tensors that suffer most under compression, attention `wv` and the `w2`
+projections, kept at six. The `M` is that medium mix.
 
 Read from the Ollama registry manifests for `llama3.2` 3B on 2026-08-25, against a parameter count
 of 3.21B. That was the chart's first base model and the benchmark baseline; the ratios are what
@@ -70,12 +86,11 @@ matter here, and they hold for the 4B served now:
 | `q8_0` | 3.19 GiB | 8.53 | 1.69x |
 | `fp16` | 5.99 GiB | 16.03 | 3.19x |
 
-**Why q4_K_M here.** It is the smallest K-quant still generally held to sit close to fp16 in
-quality, and this stack runs on kind, on CPU. Weights are only part of what has to fit: each of the
-four decode slots holds its own 8192-token KV cache, and the embedding model stays resident
-alongside. The whole process measures 7.6 GiB against the 24 GiB limit. A heavier quant buys back
-memory that four slots want more, for a difference this workload of tool-call routing and short
-grounded answers is unlikely to show.
+**What has to fit.** Weights are only part of it: each of the four decode slots holds its own
+8192-token KV cache, and the embedding model stays resident alongside. That is what the 9772 MiB
+above is measuring, and against a 24 GiB limit the precision `q8_0` keeps costs memory this Pod
+already has. On a tighter limit the trade goes the other way, which is what the `q4_K_M` row is
+there for.
 
 The tag is spelled out in full rather than left as `qwen3:4b`, so the quantization is stated and
 not inherited from whatever Ollama makes the short tag mean.
@@ -139,28 +154,18 @@ is the one the tag asked for, and that the agent points at a model Ollama serves
 ### Results
 
 Every run is logged in [`benchmarks/results.md`](../../benchmarks/results.md), with the raw stdout
-under `benchmarks/raw/`. Both columns are a GCP `n4-standard-8`, CPU-only: the first is the original
-baseline, the second is what this chart serves now.
+under `benchmarks/raw/` and the graded answers under `benchmarks/quality/raw/`, all on a GCP
+`n4-standard-8`, CPU-only.
 
-| | `llama3.2:3b-q4_K_M` | `qwen3:4b-q4_K_M` |
-|---|---|---|
-| Container limit | 4 CPU / 8 GiB | 4 CPU / 24 GiB |
-| `numParallel` | 1 | 4 |
-| Scheduled to Ready | 106 s | 21 s |
-| Model load, cold | 3.07 s | 3.32 s |
-| Container RSS | 3317 MiB | 7560 MiB |
-| Tokens/sec, sequential | 11.38 | 8.26 |
-| Tokens/sec, 4 at once | 11.29 | 20.98 |
+`server.numParallel` is what moved the aggregate number, not the model: at one slot the server
+serialises and the aggregate collapses onto the sequential rate. Each slot added through four
+raised it, the fourth by 63%, at roughly 1.1 GiB of resident memory apiece. Four is one slot per
+CPU, which is where the chart sits.
 
-`qwen3:4b` is the larger model and the slower one on a single request, so the sequential number goes
-the way it should. The aggregate number is set by `server.numParallel` rather than by the model: at
-one slot the server serialises, which is why the baseline's aggregate collapses onto its sequential
-rate. Each slot added through four raised it, the fourth by 63%, at roughly 1.1 GiB of resident
-memory apiece. Four is one slot per CPU, which is where the chart sits.
-
-Quantization is the trade-off this setup cannot measure: fewer bits means more rounding error, and
-how much that matters depends on the task. If answers degrade, `q5_K_M` and `q6_K` are one edit
-away, and the table above says what they cost in memory.
+Text quality is the part `make bench` cannot see, so `make quality` covers it separately: five
+deterministic prompts, each declaring the concepts a grounded answer has to contain, with the full
+answers kept for reading. Both quantizations scored 5/5, which says the selected profile keeps the
+required concepts rather than ranking either model in general.
 
 ## CPU-only
 

@@ -1,0 +1,28 @@
+== configuration
+pod                  ollama-86c5b6c484-n2pw7
+served model         agent-llm
+base model           qwen3:4b-q8_0   (quantization q8_0)
+options              {"num_predict":256,"temperature":0,"seed":42}
+runs / parallel      1 / 4
+OLLAMA_CONTEXT_LENGTH=8192
+OLLAMA_NUM_PARALLEL=4
+limits: {"cpu":"4","memory":"24Gi"}
+
+== startup
+init container       19 s
+scheduled to Ready   36 s
+
+== cold start
+TTFT                 7.89 s
+  model load         7.08 s
+  prompt eval        0.80 s
+
+== resident memory
+container RSS        9772Mi
+
+== warm requests
+run 1                TTFT 0.10 s   11.25 tok/s
+mean                 11.25 tok/s
+
+== aggregate throughput
+4 requests           1024 tok  38.19 s wall  26.81 tok/s aggregate

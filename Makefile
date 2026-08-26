@@ -23,8 +23,8 @@ IMAGE_TAG      ?= $(shell git log -1 --format=%h -- app)
 NAMESPACE      ?= ai-platform
 
 .PHONY: help deps registry cluster up build push \
-        deploy deploy-qdrant deploy-ollama deploy-agent deploy-monitoring \
-        install-argocd gitops release all smoke bench down clean
+	deploy deploy-qdrant deploy-ollama deploy-agent deploy-monitoring \
+	install-argocd gitops release all smoke bench quality down clean
 
 help:
 	@echo "make deps     check that docker, kind, kubectl and helm are installed"
@@ -37,6 +37,7 @@ help:
 	echo "make all      up + release + gitops"
 	echo "make smoke    end-to-end checks"
 	echo "make bench    measure the inference tier"
+	echo "make quality  run rubric-based quality checks against Ollama"
 	echo "make down     delete the cluster"
 	echo "make clean    delete the cluster and the registry"
 
@@ -146,6 +147,9 @@ smoke:
 
 bench:
 	@NAMESPACE=$(NAMESPACE) bash scripts/bench.sh
+
+quality:
+	@NAMESPACE=$(NAMESPACE) bash scripts/quality.sh
 
 down:
 	-kind delete cluster --name $(CLUSTER_NAME)

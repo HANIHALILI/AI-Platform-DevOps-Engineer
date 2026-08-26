@@ -1,0 +1,6 @@
+# id|prompt|required case-insensitive terms (comma separated)
+readiness_vs_liveness|In two concise sentences, explain the difference between a Kubernetes readiness probe and a liveness probe.|readiness,liveness,traffic,restart
+rag_grounding|In two concise sentences, explain how retrieval-augmented generation reduces hallucinations. Include the words retrieval, sources, and abstain.|retrieval,source,abstain
+context_window|Why does an LLM service need a context-window limit? Answer in two concise sentences and include the words context, tokens, and resources.|context,token,resource
+quantization_tradeoff|Compare 4-bit and 8-bit LLM quantization in two concise sentences. Mention memory, speed, and precision.|memory,speed,precision
+parallel_requests|Why can increasing LLM parallel requests improve aggregate throughput but increase memory use? Answer in two concise sentences.|throughput,memory,parallel
