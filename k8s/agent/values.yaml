@@ -9,7 +9,7 @@ image:
   # mirror on each node, so no imagePullSecrets are needed.
   repository: localhost:5001/agent
   # The commit that last touched app/. `make release` writes this line.
-  tag: 155548c
+  tag: 62c1d13
   pullPolicy: Always
 
 imagePullSecrets: []
